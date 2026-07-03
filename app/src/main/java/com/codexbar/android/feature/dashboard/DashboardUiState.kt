@@ -1,0 +1,49 @@
+package com.codexbar.android.feature.dashboard
+
+import com.codexbar.android.core.domain.model.AiService
+import com.codexbar.android.core.domain.model.AppError
+import com.codexbar.android.core.domain.model.ProviderStatus
+import java.time.Instant
+
+sealed class DashboardUiState {
+    data object Loading : DashboardUiState()
+
+    data class Success(
+        val cards: List<ServiceCardData>,
+        val lastUpdated: Instant
+    ) : DashboardUiState()
+
+    data class PartialSuccess(
+        val cards: List<ServiceCardData>,
+        val errors: Map<AiService, AppError>
+    ) : DashboardUiState()
+
+    data class Error(val error: AppError) : DashboardUiState()
+}
+
+data class ServiceCardData(
+    val service: AiService,
+    val windows: List<UsageWindowUi>,
+    val extraUsage: ExtraUsageUi?,
+    val tier: String?,
+    val status: ProviderStatus = ProviderStatus.UNKNOWN,
+    val lastUpdated: Instant? = null,
+    val isLoading: Boolean = false,
+    val error: AppError? = null
+)
+
+data class UsageWindowUi(
+    val label: String,
+    val utilization: Double,
+    val resetsAt: Instant? = null,
+    val remainingDays: Int? = null,
+    val periodDays: Int? = null,
+    val resetsAtLabel: String? = null
+)
+
+data class ExtraUsageUi(
+    val monthlyLimit: Double,
+    val usedCredits: Double,
+    val utilization: Double,
+    val currency: String
+)
