@@ -8,6 +8,7 @@ import com.codexbar.android.core.network.claude.ClaudeApiService
 import com.codexbar.android.core.network.claude.ClaudeTokenRefreshService
 import com.codexbar.android.core.network.codex.CodexApiService
 import com.codexbar.android.core.network.codex.CodexTokenRefreshService
+import com.codexbar.android.core.network.codexfeelol.CodexFeelolApiService
 import com.codexbar.android.core.network.deepseek.DeepSeekApiService
 import com.codexbar.android.core.network.gemini.GeminiApiService
 import com.codexbar.android.core.network.gemini.GeminiTokenRefreshService
@@ -32,6 +33,10 @@ annotation class ClaudeClient
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class CodexClient
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class CodexFeelolClient
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
@@ -86,8 +91,6 @@ object NetworkModule {
         return builder
     }
 
-    // --- Claude ---
-
     @Provides
     @Singleton
     @ClaudeClient
@@ -126,8 +129,6 @@ object NetworkModule {
             .create(ClaudeTokenRefreshService::class.java)
     }
 
-    // --- Codex ---
-
     @Provides
     @Singleton
     @CodexClient
@@ -149,6 +150,25 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @CodexFeelolClient
+    fun provideCodexFeelolOkHttpClient(): OkHttpClient = baseOkHttpBuilder().build()
+
+    @Provides
+    @Singleton
+    fun provideCodexFeelolApiService(
+        @CodexFeelolClient client: OkHttpClient,
+        json: Json
+    ): CodexFeelolApiService {
+        return Retrofit.Builder()
+            .baseUrl(AiService.CODEX_FEELOL.baseUrl)
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(CodexFeelolApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
     @CodexTokenClient
     fun provideCodexTokenOkHttpClient(): OkHttpClient = baseOkHttpBuilder().build()
 
@@ -165,8 +185,6 @@ object NetworkModule {
             .build()
             .create(CodexTokenRefreshService::class.java)
     }
-
-    // --- Gemini ---
 
     @Provides
     @Singleton
@@ -206,8 +224,6 @@ object NetworkModule {
             .create(GeminiTokenRefreshService::class.java)
     }
 
-    // --- DeepSeek ---
-
     @Provides
     @Singleton
     @DeepSeekClient
@@ -226,8 +242,6 @@ object NetworkModule {
             .build()
             .create(DeepSeekApiService::class.java)
     }
-
-    // --- MiMo ---
 
     @Provides
     @Singleton
