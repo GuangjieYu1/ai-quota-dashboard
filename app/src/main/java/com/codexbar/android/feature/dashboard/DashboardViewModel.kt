@@ -12,6 +12,7 @@ import com.codexbar.android.core.domain.repository.QuotaRepository
 import com.codexbar.android.core.security.EncryptedPrefsManager
 import com.codexbar.android.di.ChatGPTPlusRepository
 import com.codexbar.android.di.ClaudeRepository
+import com.codexbar.android.di.CodexFeelolRepository
 import com.codexbar.android.di.CodexRepository
 import com.codexbar.android.di.DeepSeekRepository
 import com.codexbar.android.di.GeminiRepository
@@ -29,6 +30,7 @@ import javax.inject.Inject
 class DashboardViewModel @Inject constructor(
     @ClaudeRepository private val claudeRepository: QuotaRepository,
     @CodexRepository private val codexRepository: QuotaRepository,
+    @CodexFeelolRepository private val codexFeelolRepository: QuotaRepository,
     @GeminiRepository private val geminiRepository: QuotaRepository,
     @DeepSeekRepository private val deepSeekRepository: QuotaRepository,
     @ChatGPTPlusRepository private val chatGPTPlusRepository: QuotaRepository,
@@ -48,6 +50,7 @@ class DashboardViewModel @Inject constructor(
     private val repoMap: Map<AiService, QuotaRepository> = mapOf(
         AiService.CLAUDE to claudeRepository,
         AiService.CODEX to codexRepository,
+        AiService.CODEX_FEELOL to codexFeelolRepository,
         AiService.GEMINI to geminiRepository,
         AiService.DEEPSEEK to deepSeekRepository,
         AiService.CHATGPT_PLUS to chatGPTPlusRepository,
