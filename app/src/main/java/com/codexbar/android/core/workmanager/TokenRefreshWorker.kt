@@ -51,6 +51,7 @@ class TokenRefreshWorker @AssistedInject constructor(
         return when (credential) {
             is Credential.ClaudeCredential -> refreshClaude(credential)
             is Credential.CodexCredential -> refreshCodex(credential)
+            is Credential.CodexFeelolCredential -> true
             is Credential.GeminiCredential -> refreshGemini(credential)
             is Credential.ChatGPTPlusCredential -> true
             is Credential.DeepSeekCredential -> true
