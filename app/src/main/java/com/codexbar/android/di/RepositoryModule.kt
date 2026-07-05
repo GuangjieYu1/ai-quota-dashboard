@@ -2,6 +2,7 @@ package com.codexbar.android.di
 
 import com.codexbar.android.core.data.ChatGPTPlusRepositoryImpl
 import com.codexbar.android.core.data.ClaudeRepositoryImpl
+import com.codexbar.android.core.data.CodexFeelolRepositoryImpl
 import com.codexbar.android.core.data.CodexRepositoryImpl
 import com.codexbar.android.core.data.DeepSeekRepositoryImpl
 import com.codexbar.android.core.data.GeminiRepositoryImpl
@@ -11,6 +12,7 @@ import com.codexbar.android.core.network.claude.ClaudeApiService
 import com.codexbar.android.core.network.claude.ClaudeTokenRefreshService
 import com.codexbar.android.core.network.codex.CodexApiService
 import com.codexbar.android.core.network.codex.CodexTokenRefreshService
+import com.codexbar.android.core.network.codexfeelol.CodexFeelolApiService
 import com.codexbar.android.core.network.deepseek.DeepSeekApiService
 import com.codexbar.android.core.network.gemini.GeminiApiService
 import com.codexbar.android.core.network.gemini.GeminiTokenRefreshService
@@ -32,6 +34,10 @@ annotation class ClaudeRepository
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class CodexRepository
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class CodexFeelolRepository
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
@@ -70,6 +76,14 @@ object RepositoryModule {
         tokenRefreshService: CodexTokenRefreshService,
         prefsManager: EncryptedPrefsManager
     ): QuotaRepository = CodexRepositoryImpl(apiService, tokenRefreshService, prefsManager)
+
+    @Provides
+    @Singleton
+    @CodexFeelolRepository
+    fun provideCodexFeelolRepository(
+        apiService: CodexFeelolApiService,
+        prefsManager: EncryptedPrefsManager
+    ): QuotaRepository = CodexFeelolRepositoryImpl(apiService, prefsManager)
 
     @Provides
     @Singleton
