@@ -27,6 +27,15 @@ enum class AiService(
         homeUrl = "https://chatgpt.com/",
         rechargeUrl = "https://chatgpt.com/#pricing"
     ),
+    CODEX_FEELOL(
+        displayName = "Codex (feelol)",
+        brandColor = 0xFF15A05D,
+        baseUrl = "https://feea.lol/",
+        requiresManualCredentials = false,
+        iconLabel = "FL",
+        homeUrl = "https://feea.lol/subscriptions",
+        rechargeUrl = "https://feea.lol/subscriptions"
+    ),
     GEMINI(
         displayName = "Gemini",
         brandColor = 0xFF4285F4,
@@ -66,6 +75,7 @@ enum class AiService(
 
     fun apiHost(): String = when (this) {
         CODEX, CHATGPT_PLUS -> "chatgpt.com"
+        CODEX_FEELOL -> "feea.lol"
         MIMO -> "platform.xiaomimimo.com"
         else -> ""
     }
