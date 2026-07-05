@@ -5,6 +5,7 @@ import com.codexbar.android.core.domain.model.AppError
 import com.codexbar.android.core.domain.model.Credential
 import com.codexbar.android.core.domain.model.Result
 import com.codexbar.android.core.network.deepseek.DeepSeekApiService
+import com.codexbar.android.core.network.deepseek.DeepSeekDto
 import com.codexbar.android.core.security.EncryptedPrefsManager
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -20,6 +21,7 @@ import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
+import retrofit2.Response
 import retrofit2.Retrofit
 
 class DeepSeekRepositoryImplTest {
@@ -82,8 +84,8 @@ class DeepSeekRepositoryImplTest {
         val quotaInfo = (result as Result.Success).value
         assertEquals(AiService.DEEPSEEK, quotaInfo.service)
         assertEquals("Active", quotaInfo.tier)
-        assertEquals(0.0, quotaInfo.extraUsage!!.monthlyLimit, 0.001)
-        assertEquals(12.34, quotaInfo.extraUsage!!.usedCredits, 0.001)
+        assertEquals(12.34, quotaInfo.extraUsage!!.monthlyLimit, 0.001)
+        assertEquals(0.0, quotaInfo.extraUsage!!.usedCredits, 0.001)
     }
 
     @Test
@@ -115,8 +117,50 @@ class DeepSeekRepositoryImplTest {
         assertTrue(result is Result.Success)
         val quotaInfo = (result as Result.Success).value
         assertEquals(50.0, quotaInfo.extraUsage!!.monthlyLimit, 0.001)
-        assertEquals(12.34, quotaInfo.extraUsage!!.usedCredits, 0.001)
+        assertEquals(37.66, quotaInfo.extraUsage!!.usedCredits, 0.001)
         assertEquals(1.0 - 12.34 / 50.0, quotaInfo.extraUsage!!.utilization, 0.001)
+    }
+
+    @Test
+    fun `fetchQuota maps user summary monthly costs and wallet balance`() = runTest {
+        val summaryApi = object : DeepSeekApiService {
+            override suspend fun getBalance(
+                authorization: String,
+                accept: String
+            ): Response<DeepSeekDto.BalanceResponse> {
+                error("Balance API should not be called when session cookie exists")
+            }
+
+            override suspend fun getUserSummary(
+                cookie: String,
+                accept: String
+            ): Response<DeepSeekDto.UserSummaryResponse> {
+                return Response.success(
+                    DeepSeekDto.UserSummaryResponse(
+                        code = 0,
+                        data = DeepSeekDto.UserSummaryData(
+                            monthlyCosts = json.parseToJsonElement("""{"amount":"12.4","currency":"CNY"}"""),
+                            normalWallets = json.parseToJsonElement("""[{"balance":"37.6","currency":"CNY"}]""")
+                        )
+                    )
+                )
+            }
+        }
+        `when`(prefsManager.loadCredential(AiService.DEEPSEEK)).thenReturn(
+            Credential.DeepSeekCredential(
+                accessToken = "",
+                sessionCookie = "token=test"
+            )
+        )
+        val summaryRepository = DeepSeekRepositoryImpl(summaryApi, prefsManager)
+
+        val result = summaryRepository.fetchQuota()
+
+        assertTrue(result is Result.Success)
+        val quotaInfo = (result as Result.Success).value
+        assertEquals(50.0, quotaInfo.extraUsage!!.monthlyLimit, 0.001)
+        assertEquals(12.4, quotaInfo.extraUsage!!.usedCredits, 0.001)
+        assertEquals(12.4 / 50.0, quotaInfo.extraUsage!!.utilization, 0.001)
     }
 
     @Test

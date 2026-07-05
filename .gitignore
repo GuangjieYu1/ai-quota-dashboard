@@ -13,3 +13,4 @@ local.properties
 secrets/
 debug.keystore
 google-services.json
+*.apk

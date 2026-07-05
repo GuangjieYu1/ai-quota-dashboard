@@ -14,6 +14,7 @@ import com.codexbar.android.core.domain.model.UsageWindow
 import com.codexbar.android.core.domain.repository.QuotaProvider
 import com.codexbar.android.core.domain.repository.QuotaRepository
 import com.codexbar.android.core.security.EncryptedPrefsManager
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.time.Instant
 import java.time.LocalDate
@@ -95,10 +96,12 @@ class ChatGPTPlusRepositoryImpl @Inject constructor(
         }
     }
 
+    @Serializable
     private data class SessionResponse(
         val plan: SessionPlan? = null
     )
 
+    @Serializable
     private data class SessionPlan(
         val renewalDate: String? = null,
         val interval: String? = null

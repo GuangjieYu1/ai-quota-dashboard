@@ -1,11 +1,14 @@
 package com.codexbar.android.feature.settings
 
 import com.codexbar.android.core.domain.model.AiService
+import com.codexbar.android.core.domain.model.DashboardThemeStyle
 
 data class SettingsUiState(
     val serviceStates: Map<AiService, ServiceCredentialState> = AiService.entries.associateWith {
         ServiceCredentialState()
     },
+    val enabledServices: Set<AiService> = emptySet(),
+    val dashboardTheme: DashboardThemeStyle = DashboardThemeStyle.SYSTEM,
     val refreshIntervalMinutes: Long = 30L,
     val notificationsEnabled: Boolean = true,
     val showDeleteConfirmDialog: Boolean = false
@@ -21,6 +24,7 @@ data class ServiceCredentialState(
     val expiresAtDisplay: String = "",
     val baseUrl: String = "",
     val initialTotal: String = "",
+    val sessionCookie: String = "",
     val planName: String = "",
     val renewalDate: String = "",
     val billingPeriod: String = "Monthly",

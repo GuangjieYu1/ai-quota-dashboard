@@ -1,5 +1,7 @@
 package com.codexbar.android.feature.dashboard
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,39 +13,58 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.codexbar.android.core.domain.model.AppError
+import com.codexbar.android.core.domain.model.DashboardThemeStyle
 import com.codexbar.android.core.domain.model.ProviderStatus
+import com.codexbar.android.ui.components.ServiceBrandIcon
+import com.codexbar.android.ui.theme.DashboardThemePalette
+import com.codexbar.android.ui.theme.dashboardThemePalette
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ServiceCard(
     cardData: ServiceCardData,
     onClick: () -> Unit,
+    onOpenRecharge: (String) -> Unit,
+    themeStyle: DashboardThemeStyle,
     modifier: Modifier = Modifier
 ) {
+    var showActions by remember { mutableStateOf(false) }
+    val palette = dashboardThemePalette(themeStyle)
+
     Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = { showActions = true }
+            ),
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = palette.cardElevation),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = palette.cardContainerColor
         )
     ) {
         Column(
@@ -53,35 +74,34 @@ fun ServiceCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(
-                    imageVector = Icons.Default.Cloud,
-                    contentDescription = cardData.service.displayName,
-                    modifier = Modifier.size(32.dp),
-                    tint = Color(cardData.service.brandColor)
+                ServiceBrandIcon(
+                    service = cardData.service,
+                    size = 32.dp
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = cardData.service.displayName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
+                    color = palette.cardContentColor,
                     modifier = Modifier.weight(1f)
                 )
                 cardData.tier?.let { tier ->
                     Spacer(modifier = Modifier.width(8.dp))
                     Surface(
                         shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer
+                        color = palette.secondaryTextColor.copy(alpha = 0.14f)
                     ) {
                         Text(
                             text = tier,
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                            color = palette.secondaryTextColor
                         )
                     }
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                StatusChip(status = cardData.status)
+                StatusChip(status = cardData.status, palette = palette)
             }
 
             if (cardData.error != null) {
@@ -90,14 +110,14 @@ fun ServiceCard(
                     Icon(
                         imageVector = Icons.Default.Error,
                         contentDescription = "Error",
-                        tint = MaterialTheme.colorScheme.error,
+                        tint = palette.errorColor,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = formatError(cardData.error),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
+                        color = palette.errorColor
                     )
                 }
                 return@Column
@@ -114,7 +134,8 @@ fun ServiceCard(
                     remainingDays = window.remainingDays,
                     periodDays = window.periodDays,
                     resetsAt = window.resetsAt,
-                    resetsAtLabel = window.resetsAtLabel
+                    resetsAtLabel = window.resetsAtLabel,
+                    themePalette = palette
                 )
             }
 
@@ -133,7 +154,8 @@ fun ServiceCard(
                             remainingDays = window.remainingDays,
                             periodDays = window.periodDays,
                             resetsAt = window.resetsAt,
-                            resetsAtLabel = window.resetsAtLabel
+                            resetsAtLabel = window.resetsAtLabel,
+                            themePalette = palette
                         )
                     }
                 }
@@ -144,18 +166,20 @@ fun ServiceCard(
                 val hasInitial = extra.monthlyLimit > 0
                 Text(
                     text = if (hasInitial) {
-                        "Balance: ${extra.currency} ${String.format("%.2f", extra.usedCredits)} / ${String.format("%.2f", extra.monthlyLimit)}"
+                        val balance = (extra.monthlyLimit - extra.usedCredits).coerceAtLeast(0.0)
+                        "Used: ${formatMoney(extra.currency, extra.usedCredits)}  |  Balance: ${formatMoney(extra.currency, balance)}"
                     } else {
-                        "Balance: ${extra.currency} ${String.format("%.2f", extra.usedCredits)}"
+                        "Balance: ${formatMoney(extra.currency, extra.usedCredits)}"
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = palette.secondaryTextColor
                 )
                 if (hasInitial) {
                     Spacer(modifier = Modifier.height(4.dp))
                     QuotaGaugeBar(
                         utilization = extra.utilization,
-                        label = "Used"
+                        label = "Balance",
+                        themePalette = palette
                     )
                 }
             }
@@ -165,7 +189,25 @@ fun ServiceCard(
                 Text(
                     text = "Updated: ${formatInstant(time)}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    color = palette.secondaryTextColor.copy(alpha = 0.72f)
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = showActions,
+            onDismissRequest = { showActions = false }
+        ) {
+            cardData.service.rechargeUrl?.let { rechargeUrl ->
+                DropdownMenuItem(
+                    text = { Text("Open recharge") },
+                    leadingIcon = {
+                        Icon(Icons.Default.OpenInNew, contentDescription = null)
+                    },
+                    onClick = {
+                        showActions = false
+                        onOpenRecharge(rechargeUrl)
+                    }
                 )
             }
         }
@@ -173,13 +215,13 @@ fun ServiceCard(
 }
 
 @Composable
-private fun StatusChip(status: ProviderStatus) {
+private fun StatusChip(status: ProviderStatus, palette: DashboardThemePalette) {
     val (color, label) = when (status) {
-        ProviderStatus.OK -> Pair(Color(0xFF4CAF50), "OK")
-        ProviderStatus.WARNING -> Pair(Color(0xFFFFC107), "Warning")
-        ProviderStatus.ERROR -> Pair(MaterialTheme.colorScheme.error, "Error")
-        ProviderStatus.NEEDS_LOGIN -> Pair(Color(0xFFFF9800), "Needs Login")
-        ProviderStatus.UNKNOWN -> Pair(Color.Gray, "Unknown")
+        ProviderStatus.OK -> Pair(palette.successColor, "OK")
+        ProviderStatus.WARNING -> Pair(palette.warningColor, "Warning")
+        ProviderStatus.ERROR -> Pair(palette.errorColor, "Error")
+        ProviderStatus.NEEDS_LOGIN -> Pair(palette.needsLoginColor, "Needs Login")
+        ProviderStatus.UNKNOWN -> Pair(palette.unknownColor, "Unknown")
     }
     Surface(
         shape = RoundedCornerShape(8.dp),
@@ -211,4 +253,13 @@ private fun formatInstant(instant: Instant): String {
     return DateTimeFormatter.ofPattern("HH:mm")
         .withZone(ZoneId.systemDefault())
         .format(instant)
+}
+
+private fun formatMoney(currency: String, amount: Double): String {
+    val symbol = when (currency.uppercase()) {
+        "CNY", "RMB", "¥" -> "¥"
+        "USD", "$" -> "$"
+        else -> "$currency "
+    }
+    return "$symbol${String.format("%.0f", amount)}"
 }

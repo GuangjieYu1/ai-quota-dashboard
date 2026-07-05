@@ -25,6 +25,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.codexbar.android.core.config.AppConfig
+import com.codexbar.android.core.security.EncryptedPrefsManager
 import com.codexbar.android.core.util.BatteryOptimizationHelper
 import com.codexbar.android.core.workmanager.WorkManagerInitializer
 import com.codexbar.android.feature.dashboard.DashboardScreen
@@ -36,15 +37,18 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    @Inject
+    lateinit var prefsManager: EncryptedPrefsManager
+
     private val batteryOptLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
-        WorkManagerInitializer.scheduleTokenRefresh(this)
-        WorkManagerInitializer.schedulePeriodicRefresh(this)
+        WorkManagerInitializer.scheduleConfiguredRefresh(this, prefsManager)
     }
 
     @OptIn(ExperimentalPermissionsApi::class)

@@ -65,7 +65,9 @@ class QuotaNotificationService @Inject constructor(
         quotas.forEachIndexed { index, quota ->
             if (index >= 3) return@forEachIndexed // Max 3 services
 
-            val maxUtilization = quota.windows.maxOfOrNull { it.utilization } ?: 0.0
+            val maxUtilization = quota.windows.maxOfOrNull { it.utilization }
+                ?: quota.extraUsage?.utilization
+                ?: 0.0
             val progress = (maxUtilization * 100).toInt()
 
             when (index) {

@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.codexbar.android.ui.theme.DashboardThemePalette
 import java.time.Duration
 import java.time.Instant
 
@@ -45,9 +46,13 @@ fun QuotaGaugeBar(
     periodDays: Int? = null,
     resetsAt: Instant? = null,
     resetsAtLabel: String? = null,
+    themePalette: DashboardThemePalette? = null,
     modifier: Modifier = Modifier
 ) {
     val remaining = (1.0 - utilization).coerceIn(0.0, 1.0)
+    val labelColor = themePalette?.secondaryTextColor ?: MaterialTheme.colorScheme.onSurfaceVariant
+    val trackColor = themePalette?.secondaryTextColor?.copy(alpha = 0.18f)
+        ?: MaterialTheme.colorScheme.surfaceVariant
 
     val animatedProgress by animateFloatAsState(
         targetValue = remaining.toFloat(),
@@ -57,9 +62,9 @@ fun QuotaGaugeBar(
 
     // Color based on how much is used (danger when high utilization)
     val gaugeColor = when {
-        utilization >= 0.85 -> MaterialTheme.colorScheme.error
-        utilization >= 0.60 -> AmberWarning
-        else -> MaterialTheme.colorScheme.primary
+        utilization >= 0.85 -> themePalette?.errorColor ?: MaterialTheme.colorScheme.error
+        utilization >= 0.60 -> themePalette?.warningColor ?: AmberWarning
+        else -> themePalette?.accentColor ?: MaterialTheme.colorScheme.primary
     }
 
     val animatedColor by animateColorAsState(
@@ -79,7 +84,7 @@ fun QuotaGaugeBar(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = labelColor,
                     modifier = Modifier.width(72.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
@@ -90,7 +95,7 @@ fun QuotaGaugeBar(
                     .weight(1f)
                     .height(8.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .background(trackColor)
             ) {
                 Box(
                     modifier = Modifier
@@ -123,7 +128,7 @@ fun QuotaGaugeBar(
             Text(
                 text = resetText,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = labelColor,
                 textAlign = TextAlign.End,
                 modifier = Modifier.fillMaxWidth()
             )

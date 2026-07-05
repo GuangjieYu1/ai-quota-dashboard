@@ -2,9 +2,13 @@ package com.codexbar.android.feature.settings
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -65,6 +70,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.codexbar.android.LoginActivity
 import com.codexbar.android.core.domain.model.AiService
+import com.codexbar.android.core.domain.model.DashboardThemeStyle
+import com.codexbar.android.core.network.codex.CodexUrls
+import com.codexbar.android.core.network.codex.CodexDto
+import com.codexbar.android.core.network.codex.CodexUsageResponseValidator
+import com.codexbar.android.core.network.codex.JsonSessionResponse
+import com.codexbar.android.ui.components.ServiceBrandIcon
+import com.codexbar.android.ui.theme.dashboardThemePalette
+import kotlinx.serialization.json.Json
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -112,7 +125,17 @@ fun SettingsScreen(
                 onToggle = { viewModel.setNotificationsEnabled(it) }
             )
 
-            AiService.entries.forEach { service ->
+            ProviderSelectionSection(
+                enabledServices = uiState.enabledServices,
+                onToggleProvider = { service, enabled -> viewModel.setProviderEnabled(service, enabled) }
+            )
+
+            ThemeSelectionSection(
+                selectedTheme = uiState.dashboardTheme,
+                onThemeSelected = { viewModel.setDashboardTheme(it) }
+            )
+
+            AiService.entries.filter { uiState.enabledServices.contains(it) }.forEach { service ->
                 val state = uiState.serviceStates[service] ?: ServiceCredentialState()
                 ServiceCredentialSection(
                     service = service,
@@ -163,6 +186,128 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun ProviderSelectionSection(
+    enabledServices: Set<AiService>,
+    onToggleProvider: (AiService, Boolean) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Providers",
+                style = MaterialTheme.typography.titleMedium
+            )
+            AiService.entries.forEach { service ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        ServiceBrandIcon(service = service, size = 28.dp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = service.displayName,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = if (service.requiresManualCredentials) "Manual credentials" else "Browser login available",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = enabledServices.contains(service),
+                        onCheckedChange = { enabled -> onToggleProvider(service, enabled) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeSelectionSection(
+    selectedTheme: DashboardThemeStyle,
+    onThemeSelected: (DashboardThemeStyle) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Dashboard Theme",
+                style = MaterialTheme.typography.titleMedium
+            )
+            DashboardThemeStyle.entries.forEach { theme ->
+                FilterChip(
+                    selected = theme == selectedTheme,
+                    onClick = { onThemeSelected(theme) },
+                    label = {
+                        Row(
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ThemePreviewDots(theme = theme)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(theme.displayName)
+                                Text(
+                                    text = theme.description,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemePreviewDots(theme: DashboardThemeStyle) {
+    val palette = dashboardThemePalette(theme)
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        ThemePreviewDot(color = palette.backgroundColor)
+        ThemePreviewDot(color = palette.cardContainerColor)
+        ThemePreviewDot(color = palette.accentColor)
+    }
+}
+
+@Composable
+private fun ThemePreviewDot(color: Color) {
+    Box(
+        modifier = Modifier
+            .size(12.dp)
+            .background(color = color, shape = CircleShape)
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.42f),
+                shape = CircleShape
+            )
+    )
+}
+
+@Composable
 private fun ServiceCredentialSection(
     service: AiService,
     state: ServiceCredentialState,
@@ -173,17 +318,12 @@ private fun ServiceCredentialSection(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Cloud,
-                    contentDescription = service.displayName,
-                    tint = Color(service.brandColor),
-                    modifier = Modifier.size(24.dp)
-                )
+                ServiceBrandIcon(service = service, size = 28.dp)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = service.displayName,
@@ -197,7 +337,7 @@ private fun ServiceCredentialSection(
                 AiService.CLAUDE -> ClaudeFields(state, onFieldChange)
                 AiService.CODEX -> CodexFields(state, onFieldChange, onLoginClick)
                 AiService.GEMINI -> GeminiFields(state, onFieldChange)
-                AiService.DEEPSEEK -> DeepSeekFields(state, onFieldChange)
+                AiService.DEEPSEEK -> DeepSeekFields(state, onFieldChange, onLoginClick)
                 AiService.CHATGPT_PLUS -> ChatGPTPlusFields(state, onFieldChange, onLoginClick)
                 AiService.MIMO -> MiMoFields(state, onFieldChange, onToggleBackendMode, onLoginClick)
             }
@@ -274,24 +414,71 @@ private fun ClaudeFields(state: ServiceCredentialState, onFieldChange: (String, 
 }
 
 @Composable
-private fun CodexFields(state: ServiceCredentialState, onFieldChange: (String, String) -> Unit, onLoginClick: () -> Unit) {
+private fun CodexFields(
+    state: ServiceCredentialState,
+    onFieldChange: (String, String) -> Unit,
+    onLoginClick: () -> Unit
+) {
+    val context = LocalContext.current
+
     Text(
-        text = "Option 1: Paste raw API response (skip API calls)",
+        text = "Option 1: Browser helper",
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary
     )
     Text(
-        text = "Open chatgpt.com → open a new tab → paste this URL:\n" +
-            "https://chatgpt.com/backend-api/wham/usage\n" +
-            "Copy the JSON response and paste it below.",
+        text = "Open ChatGPT in your regular browser, then open ${CodexUrls.SESSION_API}. The app extracts accessToken and requests Codex usage with a bearer token.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Spacer(modifier = Modifier.height(8.dp))
+    Button(
+        onClick = onLoginClick,
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10A37F)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Icon(Icons.Default.Cloud, contentDescription = null)
+        Spacer(modifier = Modifier.width(6.dp))
+        Text("Login with Browser")
+    }
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Text(
+        text = "Option 2: Paste session JSON",
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary
+    )
+    Text(
+        text = "Open ${CodexUrls.SESSION_API} while signed in to chatgpt.com, copy the full session JSON, and paste it below.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Button(
+            onClick = { openExternalUrl(context, CodexUrls.CHATGPT_HOME) },
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10A37F)),
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(Icons.Default.Cloud, contentDescription = null)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Open ChatGPT")
+        }
+        OutlinedButton(
+            onClick = { openExternalUrl(context, CodexUrls.SESSION_API) },
+            modifier = Modifier.weight(1f)
+        ) {
+            Text("Open Session")
+        }
+    }
+    Spacer(modifier = Modifier.height(8.dp))
     OutlinedTextField(
         value = state.manualResponse,
         onValueChange = { onFieldChange("manualResponse", it) },
-        label = { Text("Raw API Response (JSON)") },
+        label = { Text("Session Response JSON") },
         placeholder = { Text("Paste the full JSON response here") },
         modifier = Modifier
             .fillMaxWidth()
@@ -300,14 +487,10 @@ private fun CodexFields(state: ServiceCredentialState, onFieldChange: (String, S
         singleLine = false
     )
     if (state.manualResponse.isNotBlank()) {
-        val isValid = try {
-            kotlinx.serialization.json.Json.decodeFromString<com.codexbar.android.core.network.codex.CodexDto.UsageResponse>(state.manualResponse)
-            true
-        } catch (_: Exception) {
-            false
-        }
+        val validationMessage = codexResponseValidationMessage(state.manualResponse)
+        val isValid = validationMessage == CodexUsageResponseValidator.VALID_RESPONSE_MESSAGE
         Text(
-            text = if (isValid) "Valid JSON response" else "Invalid JSON response",
+            text = validationMessage,
             style = MaterialTheme.typography.bodySmall,
             color = if (isValid) Color(0xFF4CAF50) else Color(0xFFF44336)
         )
@@ -315,7 +498,7 @@ private fun CodexFields(state: ServiceCredentialState, onFieldChange: (String, S
     Spacer(modifier = Modifier.height(16.dp))
 
     Text(
-        text = "Option 2: Manual token input (API call mode)",
+        text = "Option 3: Manual token input (API call mode)",
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary
     )
@@ -354,15 +537,40 @@ private fun CodexFields(state: ServiceCredentialState, onFieldChange: (String, S
         modifier = Modifier.fillMaxWidth(),
         singleLine = true
     )
-    Spacer(modifier = Modifier.height(12.dp))
-    Button(
-        onClick = onLoginClick,
-        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10A37F))
-    ) {
-        Icon(Icons.Default.Cloud, contentDescription = null)
-        Spacer(modifier = Modifier.width(6.dp))
-        Text("Login with Browser")
+}
+
+private fun openExternalUrl(context: android.content.Context, url: String) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+    runCatching { context.startActivity(intent) }
+}
+
+private val codexJson = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+}
+
+private fun codexResponseValidationMessage(response: String): String {
+    if (parseCodexSessionAccessToken(response) != null) {
+        return CodexUsageResponseValidator.VALID_RESPONSE_MESSAGE
     }
+
+    val usageResponse = runCatching {
+        codexJson.decodeFromString<CodexDto.UsageResponse>(response)
+    }.getOrNull()
+
+    return if (usageResponse != null && CodexUsageResponseValidator.hasUsageData(usageResponse)) {
+        CodexUsageResponseValidator.VALID_RESPONSE_MESSAGE
+    } else if (response.contains("unauthorized", ignoreCase = true)) {
+        "Unauthorized response cannot be saved. Paste session JSON from ${CodexUrls.SESSION_API}."
+    } else {
+        "Invalid Codex response"
+    }
+}
+
+private fun parseCodexSessionAccessToken(response: String): String? {
+    return runCatching {
+        codexJson.decodeFromString<JsonSessionResponse>(response).accessToken?.takeIf { it.isNotBlank() }
+    }.getOrNull()
 }
 
 @Composable
@@ -417,7 +625,38 @@ private fun GeminiFields(state: ServiceCredentialState, onFieldChange: (String, 
 }
 
 @Composable
-private fun DeepSeekFields(state: ServiceCredentialState, onFieldChange: (String, String) -> Unit) {
+private fun DeepSeekFields(
+    state: ServiceCredentialState,
+    onFieldChange: (String, String) -> Unit,
+    onLoginClick: () -> Unit
+) {
+    Button(
+        onClick = onLoginClick,
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F9CF5)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Icon(Icons.Default.Cloud, contentDescription = null)
+        Spacer(modifier = Modifier.width(6.dp))
+        Text("Login with DeepSeek")
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    OutlinedTextField(
+        value = state.sessionCookie,
+        onValueChange = { onFieldChange("sessionCookie", it) },
+        label = { Text("Platform Cookie") },
+        placeholder = { Text("Saved automatically after browser login") },
+        visualTransformation = PasswordVisualTransformation(),
+        modifier = Modifier.fillMaxWidth(),
+        minLines = 2,
+        maxLines = 4
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+    Text(
+        text = "API key fallback",
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary
+    )
+    Spacer(modifier = Modifier.height(8.dp))
     OutlinedTextField(
         value = state.accessToken,
         onValueChange = { onFieldChange("accessToken", it) },
@@ -615,7 +854,7 @@ private fun RefreshIntervalSection(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -650,7 +889,7 @@ private fun NotificationsSection(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
@@ -698,7 +937,7 @@ private fun SaveAllButton(onSave: () -> Unit) {
 private fun DangerZoneSection(onDeleteAll: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
         )

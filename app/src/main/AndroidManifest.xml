@@ -100,16 +100,12 @@
             </intent-filter>
         </receiver>
 
-        <!-- WorkManager Initializer via App Startup -->
+        <!-- WorkManager is initialized lazily from CodexBarApplication with HiltWorkerFactory. -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
             android:exported="false"
-            tools:node="merge">
-            <meta-data
-                android:name="com.codexbar.android.core.workmanager.WorkManagerInitializer"
-                android:value="androidx.startup" />
-        </provider>
+            tools:node="remove" />
 
     </application>
 

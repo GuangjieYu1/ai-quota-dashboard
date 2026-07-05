@@ -6,23 +6,26 @@ import android.service.quicksettings.TileService
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
+import androidx.work.ListenableWorker.Result as WorkResult
 import androidx.work.WorkerParameters
 import com.codexbar.android.core.domain.model.AiService
+import com.codexbar.android.core.domain.model.AppError
 import com.codexbar.android.core.domain.model.QuotaInfo
-import com.codexbar.android.core.domain.model.Result
+import com.codexbar.android.core.domain.model.Result as DomainResult
 import com.codexbar.android.core.domain.repository.QuotaRepository
 import com.codexbar.android.core.notification.QuotaNotificationService
 import com.codexbar.android.core.security.EncryptedPrefsManager
 import com.codexbar.android.core.tile.QuotaTileService
 import com.codexbar.android.core.widget.QuotaGlanceWidget
-import com.codexbar.android.core.widget.QuotaWidgetReceiver
 import com.codexbar.android.core.widget.WidgetPrefsManager
+import com.codexbar.android.di.ChatGPTPlusRepository
 import com.codexbar.android.di.ClaudeRepository
 import com.codexbar.android.di.CodexRepository
+import com.codexbar.android.di.DeepSeekRepository
 import com.codexbar.android.di.GeminiRepository
+import com.codexbar.android.di.MiMoRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -36,19 +39,38 @@ class QuotaRefreshWorker @AssistedInject constructor(
     @ClaudeRepository private val claudeRepository: QuotaRepository,
     @CodexRepository private val codexRepository: QuotaRepository,
     @GeminiRepository private val geminiRepository: QuotaRepository,
+    @DeepSeekRepository private val deepSeekRepository: QuotaRepository,
+    @ChatGPTPlusRepository private val chatGPTPlusRepository: QuotaRepository,
+    @MiMoRepository private val miMoRepository: QuotaRepository,
     private val prefsManager: EncryptedPrefsManager,
     private val notificationService: QuotaNotificationService,
     private val widgetPrefsManager: WidgetPrefsManager
 ) : CoroutineWorker(context, workerParams) {
 
-    override suspend fun doWork(): Result {
+    override suspend fun doWork(): WorkResult {
+        val enabledServices = prefsManager.getEnabledServices()
         val repos = buildList {
-            if (prefsManager.hasCredential(AiService.CLAUDE)) add(AiService.CLAUDE to claudeRepository)
-            if (prefsManager.hasCredential(AiService.CODEX)) add(AiService.CODEX to codexRepository)
-            if (prefsManager.hasCredential(AiService.GEMINI)) add(AiService.GEMINI to geminiRepository)
+            if (enabledServices.contains(AiService.CLAUDE) && prefsManager.hasCredential(AiService.CLAUDE)) {
+                add(AiService.CLAUDE to claudeRepository)
+            }
+            if (enabledServices.contains(AiService.CODEX) && prefsManager.hasCredential(AiService.CODEX)) {
+                add(AiService.CODEX to codexRepository)
+            }
+            if (enabledServices.contains(AiService.GEMINI) && prefsManager.hasCredential(AiService.GEMINI)) {
+                add(AiService.GEMINI to geminiRepository)
+            }
+            if (enabledServices.contains(AiService.DEEPSEEK) && prefsManager.hasCredential(AiService.DEEPSEEK)) {
+                add(AiService.DEEPSEEK to deepSeekRepository)
+            }
+            if (enabledServices.contains(AiService.CHATGPT_PLUS) && prefsManager.hasCredential(AiService.CHATGPT_PLUS)) {
+                add(AiService.CHATGPT_PLUS to chatGPTPlusRepository)
+            }
+            if (enabledServices.contains(AiService.MIMO) && prefsManager.hasCredential(AiService.MIMO)) {
+                add(AiService.MIMO to miMoRepository)
+            }
         }
 
-        if (repos.isEmpty()) return Result.success()
+        if (repos.isEmpty()) return WorkResult.success()
 
         return try {
             val quotas = coroutineScope {
@@ -59,8 +81,8 @@ class QuotaRefreshWorker @AssistedInject constructor(
 
             val successfulQuotas = quotas.mapNotNull { result ->
                 when (result) {
-                    is com.codexbar.android.core.domain.model.Result.Success -> result.value
-                    is com.codexbar.android.core.domain.model.Result.Failure -> null
+                    is DomainResult.Success -> result.value
+                    is DomainResult.Failure -> null
                 }
             }
 
@@ -83,23 +105,47 @@ class QuotaRefreshWorker @AssistedInject constructor(
                 ComponentName(applicationContext, QuotaTileService::class.java)
             )
 
-            if (successfulQuotas.isEmpty()) {
-                Result.retry()
+            val hasRetryableFailure = quotas.any { result ->
+                result is DomainResult.Failure && result.error.isRetryable()
+            }
+
+            if (successfulQuotas.isEmpty() && hasRetryableFailure) {
+                WorkResult.retry()
             } else {
-                Result.success()
+                WorkResult.success()
             }
         } catch (_: Exception) {
-            Result.retry()
+            WorkResult.retry()
+        }
+    }
+
+    private fun AppError.isRetryable(): Boolean {
+        return when (this) {
+            is AppError.CredentialNotFound,
+            is AppError.NeedsLogin -> false
+            is AppError.AuthError -> !isTerminal
+            else -> true
         }
     }
 
     private fun cacheQuotaData(quotas: List<QuotaInfo>) {
         for (quota in quotas) {
-            val windows = quota.windows.map { window ->
+            val sourceWindows = if (quota.windows.isEmpty() && quota.extraUsage != null) {
+                listOf(Triple("Balance", quota.extraUsage.utilization, null as Long?))
+            } else {
+                quota.windows.map { window ->
+                    Triple(
+                        window.label,
+                        window.utilization,
+                        window.resetsAt?.epochSecond
+                    )
+                }
+            }
+            val windows = sourceWindows.map { (label, utilization, resetsAt) ->
                 Triple(
-                    window.label,
-                    window.utilization,
-                    window.resetsAt?.epochSecond
+                    label,
+                    utilization,
+                    resetsAt
                 )
             }
             widgetPrefsManager.cacheAllQuotaData(quota.service, windows)

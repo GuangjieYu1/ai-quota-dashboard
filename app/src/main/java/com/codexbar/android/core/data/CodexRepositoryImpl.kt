@@ -10,6 +10,7 @@ import com.codexbar.android.core.domain.repository.QuotaRepository
 import com.codexbar.android.core.network.codex.CodexApiService
 import com.codexbar.android.core.network.codex.CodexDto
 import com.codexbar.android.core.network.codex.CodexTokenRefreshService
+import com.codexbar.android.core.network.codex.CodexUsageResponseValidator
 import com.codexbar.android.core.security.EncryptedPrefsManager
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
@@ -23,14 +24,37 @@ class CodexRepositoryImpl @Inject constructor(
     private val tokenRefreshService: CodexTokenRefreshService,
     private val prefsManager: EncryptedPrefsManager
 ) : QuotaRepository {
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
 
     override suspend fun fetchQuota(): Result<QuotaInfo, AppError> {
         val credential = prefsManager.loadCredential(AiService.CODEX)
             as? Credential.CodexCredential
             ?: return Result.Failure(AppError.CredentialNotFound(AiService.CODEX))
 
-        if (credential.manualResponse != null) {
-            return parseManualResponse(credential.manualResponse)
+        credential.manualResponse?.takeIf { it.isNotBlank() }?.let { manualResponse ->
+            if (CodexUsageResponseValidator.isValidUsageResponse(manualResponse)) {
+                return parseManualResponse(manualResponse)
+            }
+            if (credential.accessToken.isBlank()) {
+                return Result.Failure(
+                    AppError.NeedsLogin(
+                        AiService.CODEX,
+                        CodexUsageResponseValidator.validationMessage(manualResponse)
+                    )
+                )
+            }
+        }
+
+        if (credential.accessToken.isBlank()) {
+            return Result.Failure(
+                AppError.NeedsLogin(
+                    AiService.CODEX,
+                    "Paste a valid Codex usage JSON response or configure Codex tokens"
+                )
+            )
         }
 
         return try {
@@ -83,6 +107,8 @@ class CodexRepositoryImpl @Inject constructor(
     }
 
     private suspend fun refreshToken(credential: Credential.CodexCredential): Credential.CodexCredential? {
+        if (credential.refreshToken.isBlank()) return null
+
         return try {
             val request = CodexDto.TokenRefreshRequest(refreshToken = credential.refreshToken)
             val response = tokenRefreshService.refreshToken(request)
@@ -147,7 +173,7 @@ class CodexRepositoryImpl @Inject constructor(
 
     private fun parseManualResponse(json: String): Result<QuotaInfo, AppError> {
         return try {
-            val response = Json.decodeFromString<CodexDto.UsageResponse>(json)
+            val response = this.json.decodeFromString<CodexDto.UsageResponse>(json)
             Result.Success(mapToQuotaInfo(response))
         } catch (e: Exception) {
             Result.Failure(AppError.ParseError("Invalid manual response: ${e.message}", e))

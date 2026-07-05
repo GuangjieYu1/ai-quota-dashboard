@@ -33,7 +33,8 @@ class QuotaTileService : TileService() {
     private fun updateTile() {
         val tile = qsTile ?: return
 
-        val hasAnyCredential = AiService.entries.any { prefsManager.hasCredential(it) }
+        val enabledServices = prefsManager.getEnabledServices()
+        val hasAnyCredential = enabledServices.any { prefsManager.hasCredential(it) }
 
         if (!hasAnyCredential) {
             tile.state = Tile.STATE_UNAVAILABLE
@@ -56,7 +57,7 @@ class QuotaTileService : TileService() {
 
     private fun buildSummarySubtitle(): String {
         // Summary will be updated by WorkManager after fetch
-        val services = AiService.entries.filter { prefsManager.hasCredential(it) }
+        val services = prefsManager.getEnabledServices().filter { prefsManager.hasCredential(it) }
         return services.joinToString(" | ") { it.displayName }
     }
 }

@@ -1,7 +1,9 @@
 package com.codexbar.android
 
 import android.app.Activity
+import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Bundle
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -10,6 +12,7 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +35,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -49,7 +53,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.codexbar.android.core.domain.model.AiService
 import com.codexbar.android.core.domain.model.Credential
+import com.codexbar.android.core.network.codex.CodexUrls
+import com.codexbar.android.core.network.codex.CodexUsageResponseValidator
+import com.codexbar.android.core.network.codex.JsonSessionResponse
 import com.codexbar.android.core.security.EncryptedPrefsManager
+import com.codexbar.android.ui.components.ServiceBrandIcon
 import com.codexbar.android.ui.theme.CodexBarTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.serialization.json.Json
@@ -64,14 +72,15 @@ class LoginActivity : ComponentActivity() {
         const val EXTRA_SERVICE = "extra_service"
 
         private val LOGIN_URLS = mapOf(
-            AiService.CODEX to "https://chatgpt.com/auth/login",
-            AiService.CHATGPT_PLUS to "https://chatgpt.com/auth/login",
+            AiService.CODEX to CodexUrls.LOGIN,
+            AiService.CHATGPT_PLUS to CodexUrls.LOGIN,
+            AiService.DEEPSEEK to AiService.DEEPSEEK.homeUrl,
             AiService.MIMO to "https://platform.xiaomimimo.com/auth/login"
         )
 
         private val API_URLS = mapOf(
-            AiService.CHATGPT_PLUS to "https://chatgpt.com/api/auth/session",
-            AiService.CODEX to "https://chatgpt.com/backend-api/wham/usage"
+            AiService.CHATGPT_PLUS to CodexUrls.SESSION_API,
+            AiService.CODEX to CodexUrls.SESSION_API
         )
 
         fun loginUrl(service: AiService): String =
@@ -90,11 +99,117 @@ class LoginActivity : ComponentActivity() {
 
         setContent {
             CodexBarTheme {
-                LoginScreen(
-                    service = service,
-                    initialUrl = loginUrl(service),
-                    onCancel = { finish() }
+                if (service == AiService.CODEX) {
+                    CodexBrowserHelperScreen(onCancel = { finish() })
+                } else {
+                    LoginScreen(
+                        service = service,
+                        initialUrl = loginUrl(service),
+                        onCancel = { finish() }
+                    )
+                }
+            }
+        }
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @androidx.compose.runtime.Composable
+    private fun CodexBrowserHelperScreen(onCancel: () -> Unit) {
+        var statusText by remember { mutableStateOf("") }
+        var manualInput by remember { mutableStateOf("") }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ServiceBrandIcon(service = AiService.CODEX, size = 24.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Login: ${AiService.CODEX.displayName}")
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onCancel) {
+                            Icon(Icons.Default.Close, contentDescription = "Cancel")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
                 )
+            }
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Open ChatGPT in your regular browser, then open ${CodexUrls.SESSION_API}. Copy the full session JSON and paste it below.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = "The app extracts accessToken from the session JSON and requests Codex usage with the required bearer token.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { openExternalUrl(CodexUrls.CHATGPT_HOME) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Open ChatGPT")
+                    }
+                    OutlinedButton(
+                        onClick = { openExternalUrl(apiUrl(AiService.CODEX) ?: loginUrl(AiService.CODEX)) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Open Session")
+                    }
+                }
+
+                OutlinedTextField(
+                    value = manualInput,
+                    onValueChange = {
+                        manualInput = it
+                        statusText = if (it.isBlank()) "" else validateCodexManualInput(it)
+                    },
+                    label = { Text("Session Response JSON") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp),
+                    minLines = 5,
+                    maxLines = 12
+                )
+
+                if (statusText.isNotBlank()) {
+                    val isValid = statusText == CodexUsageResponseValidator.VALID_RESPONSE_MESSAGE
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isValid) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
+                    )
+                }
+
+                Button(
+                    onClick = {
+                        val error = saveManualResponse(AiService.CODEX, manualInput)
+                        if (error != null) {
+                            statusText = error
+                        }
+                    },
+                    enabled = manualInput.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Save & Finish")
+                }
             }
         }
     }
@@ -117,12 +232,7 @@ class LoginActivity : ComponentActivity() {
                 TopAppBar(
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Cloud,
-                                contentDescription = null,
-                                tint = Color(service.brandColor),
-                                modifier = Modifier.size(24.dp)
-                            )
+                            ServiceBrandIcon(service = service, size = 24.dp)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Login: ${service.displayName}")
                         }
@@ -194,9 +304,12 @@ class LoginActivity : ComponentActivity() {
                                         when {
                                             apiTarget?.let { url.startsWith(it) } == true -> {
                                                 statusText = "Extracting data..."
-                                                extractJsonFromPage(view, service)
+                                                extractJsonFromPage(view, service) { message ->
+                                                    statusText = message
+                                                    showPasteForm = true
+                                                }
                                             }
-                                            service == AiService.MIMO -> {
+                                            service == AiService.MIMO || service == AiService.DEEPSEEK -> {
                                                 attemptExtractData(view, service)
                                             }
                                             url.contains("chatgpt.com") && !url.contains("auth/") -> {
@@ -256,12 +369,12 @@ class LoginActivity : ComponentActivity() {
 
                         val instructions = when (service) {
                             AiService.CODEX -> {
-                                "1. Open https://chatgpt.com/backend-api/wham/usage in your browser (logged in)\n" +
-                                "2. Copy the entire JSON response\n" +
-                                "3. Paste it below"
+                                "1. Open ${CodexUrls.CHATGPT_HOME} in your browser and confirm you are signed in\n" +
+                                "2. Open ${CodexUrls.SESSION_API}\n" +
+                                "3. Copy the entire JSON response and paste it below"
                             }
                             AiService.CHATGPT_PLUS -> {
-                                "1. Open https://chatgpt.com/api/auth/session in your browser (logged in)\n" +
+                                "1. Open ${CodexUrls.SESSION_API} in your browser (logged in)\n" +
                                 "2. Copy the entire JSON response\n" +
                                 "3. Paste it below"
                             }
@@ -304,10 +417,7 @@ class LoginActivity : ComponentActivity() {
         return try {
             when (service) {
                 AiService.CODEX -> {
-                    val credential = Credential.CodexCredential(
-                        accessToken = "", refreshToken = "", manualResponse = response
-                    )
-                    prefsManager.saveCredential(AiService.CODEX, credential)
+                    saveCodexManualResponse(response)?.let { return it }
                 }
                 AiService.CHATGPT_PLUS -> {
                     val sessionJson = json.decodeFromString<JsonSessionResponse>(response)
@@ -327,6 +437,13 @@ class LoginActivity : ComponentActivity() {
                     val credential = Credential.MiMoCredential(directCookie = response)
                     prefsManager.saveCredential(AiService.MIMO, credential)
                 }
+                AiService.DEEPSEEK -> {
+                    val credential = Credential.DeepSeekCredential(
+                        accessToken = "",
+                        sessionCookie = response
+                    )
+                    prefsManager.saveCredential(AiService.DEEPSEEK, credential)
+                }
                 else -> return null
             }
             setResult(Activity.RESULT_OK)
@@ -337,15 +454,26 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    private fun extractJsonFromPage(view: WebView, service: AiService) {
-        view.evaluateJavascript("document.body?.innerText?.trim() ?: ''") { result ->
-            val rawText = result?.trim('"')?.trim() ?: return@evaluateJavascript
-            if (rawText.length < 10) return@evaluateJavascript
+    private fun extractJsonFromPage(
+        view: WebView,
+        service: AiService,
+        onInvalidResponse: (String) -> Unit
+    ) {
+        view.evaluateJavascript("document.body ? document.body.innerText.trim() : ''") { result ->
+            val rawText = decodeJavascriptString(result) ?: return@evaluateJavascript
+            if (rawText.length < 10) {
+                onInvalidResponse("No usable response was found. Open the API URL in a logged-in browser and paste the JSON response.")
+                return@evaluateJavascript
+            }
 
             when (service) {
                 AiService.CHATGPT_PLUS -> {
                     try {
                         val sessionJson = json.decodeFromString<JsonSessionResponse>(rawText)
+                        if (sessionJson.accessToken.isNullOrBlank() && sessionJson.plan == null) {
+                            onInvalidResponse("The session endpoint did not return account data. Log in to chatgpt.com first, then try again or paste the response manually.")
+                            return@evaluateJavascript
+                        }
                         val credential = Credential.ChatGPTPlusCredential(
                             accessToken = sessionJson.accessToken ?: "",
                             planName = sessionJson.plan?.title ?: sessionJson.plan?.id ?: "Plus",
@@ -359,13 +487,15 @@ class LoginActivity : ComponentActivity() {
                         prefsManager.saveCredential(AiService.CHATGPT_PLUS, credential)
                         setResult(Activity.RESULT_OK)
                         finish()
-                    } catch (_: Exception) {}
+                    } catch (_: Exception) {
+                        onInvalidResponse("Could not read the ChatGPT session response. Paste the JSON response manually.")
+                    }
                 }
                 AiService.CODEX -> {
-                    val credential = Credential.CodexCredential(
-                        accessToken = "", refreshToken = "", manualResponse = rawText
-                    )
-                    prefsManager.saveCredential(AiService.CODEX, credential)
+                    saveCodexResponse(rawText)?.let { message ->
+                        onInvalidResponse(message)
+                        return@evaluateJavascript
+                    }
                     setResult(Activity.RESULT_OK)
                     finish()
                 }
@@ -374,9 +504,65 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    private fun saveCodexManualResponse(response: String): String? = saveCodexResponse(response)
+
+    private fun saveCodexResponse(response: String): String? {
+        parseCodexSessionAccessToken(response)?.let { accessToken ->
+            val credential = Credential.CodexCredential(
+                accessToken = accessToken,
+                refreshToken = ""
+            )
+            prefsManager.saveCredential(AiService.CODEX, credential)
+            return null
+        }
+
+        val usageResponse = CodexUsageResponseValidator.parse(response)
+        if (usageResponse == null || !CodexUsageResponseValidator.hasUsageData(usageResponse)) {
+            return invalidCodexResponseMessage(response)
+        }
+
+        val credential = Credential.CodexCredential(
+            accessToken = "",
+            refreshToken = "",
+            manualResponse = response
+        )
+        prefsManager.saveCredential(AiService.CODEX, credential)
+        return null
+    }
+
+    private fun invalidCodexResponseMessage(response: String): String {
+        return if (CodexUsageResponseValidator.validationMessage(response).startsWith("Unauthorized")) {
+            "ChatGPT returned Unauthorized. Open ${CodexUrls.SESSION_API} while signed in, then paste the session JSON."
+        } else {
+            "Paste a valid ChatGPT session JSON with accessToken, or a saved Codex usage JSON response."
+        }
+    }
+
+    private fun parseCodexSessionAccessToken(response: String): String? {
+        return runCatching {
+            json.decodeFromString<JsonSessionResponse>(response).accessToken?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    private fun validateCodexManualInput(response: String): String {
+        if (parseCodexSessionAccessToken(response) != null) {
+            return CodexUsageResponseValidator.VALID_RESPONSE_MESSAGE
+        }
+        return CodexUsageResponseValidator.validationMessage(response)
+    }
+
+    private fun decodeJavascriptString(result: String?): String? {
+        if (result.isNullOrBlank() || result == "null") return null
+        return runCatching { json.decodeFromString<String>(result) }
+            .getOrNull()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+    }
+
     private fun attemptExtractData(view: WebView, service: AiService) {
         when (service) {
             AiService.MIMO -> extractMiMoData(view)
+            AiService.DEEPSEEK -> extractDeepSeekData()
             else -> {}
         }
     }
@@ -390,27 +576,32 @@ class LoginActivity : ComponentActivity() {
             finish()
         }
     }
+
+    private fun extractDeepSeekData() {
+        val cookies = CookieManager.getInstance().getCookie("https://platform.deepseek.com") ?: ""
+        if (cookies.isNotBlank() && hasLikelyAuthCookie(cookies)) {
+            val credential = Credential.DeepSeekCredential(
+                accessToken = "",
+                sessionCookie = cookies
+            )
+            prefsManager.saveCredential(AiService.DEEPSEEK, credential)
+            setResult(Activity.RESULT_OK)
+            finish()
+        }
+    }
+
+    private fun hasLikelyAuthCookie(cookies: String): Boolean {
+        return cookies.split(";")
+            .map { it.trim().lowercase() }
+            .any { cookie ->
+                cookie.contains("token") ||
+                    cookie.contains("session") ||
+                    cookie.contains("auth")
+            }
+    }
+
+    private fun openExternalUrl(url: String) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        runCatching { startActivity(intent) }
+    }
 }
-
-@kotlinx.serialization.Serializable
-data class JsonSessionResponse(
-    val accessToken: String? = null,
-    val user: JsonUser? = null,
-    val plan: JsonPlan? = null,
-    val expires: String? = null
-)
-
-@kotlinx.serialization.Serializable
-data class JsonUser(
-    val name: String? = null,
-    val email: String? = null,
-    val image: String? = null
-)
-
-@kotlinx.serialization.Serializable
-data class JsonPlan(
-    val id: String? = null,
-    val title: String? = null,
-    val interval: String? = null,
-    val renewalDate: String? = null
-)

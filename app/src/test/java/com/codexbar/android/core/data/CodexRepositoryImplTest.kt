@@ -112,6 +112,30 @@ class CodexRepositoryImplTest {
     }
 
     @Test
+    fun `fetchQuota sends bearer authorization header`() = runTest {
+        val responseJson = """
+        {
+            "plan_type": "pro",
+            "rate_limit": {
+                "primary_window": {
+                    "used_percent": 45,
+                    "limit_window_seconds": 18000
+                }
+            }
+        }
+        """.trimIndent()
+
+        mockWebServer.enqueue(MockResponse().setResponseCode(200).setBody(responseJson))
+
+        val result = repository.fetchQuota()
+        val request = mockWebServer.takeRequest()
+
+        assertTrue(result is Result.Success)
+        assertEquals("Bearer test-access-token", request.getHeader("Authorization"))
+        assertEquals("test-account-id", request.getHeader("ChatGPT-Account-Id"))
+    }
+
+    @Test
     fun `fetchQuota returns AuthError on 401`() = runTest {
         mockWebServer.enqueue(MockResponse().setResponseCode(401))
         mockWebServer.enqueue(MockResponse().setResponseCode(401))
@@ -121,6 +145,24 @@ class CodexRepositoryImplTest {
         assertTrue(result is Result.Failure)
         val error = (result as Result.Failure).error
         assertTrue(error is AppError.AuthError)
+    }
+
+    @Test
+    fun `fetchQuota does not refresh when refresh token is blank`() = runTest {
+        `when`(prefsManager.loadCredential(AiService.CODEX)).thenReturn(
+            Credential.CodexCredential(
+                accessToken = "test-access-token",
+                refreshToken = "",
+                accountId = "test-account-id"
+            )
+        )
+        mockWebServer.enqueue(MockResponse().setResponseCode(401))
+
+        val result = repository.fetchQuota()
+
+        assertTrue(result is Result.Failure)
+        assertTrue((result as Result.Failure).error is AppError.AuthError)
+        assertEquals(1, mockWebServer.requestCount)
     }
 
     @Test
@@ -141,6 +183,53 @@ class CodexRepositoryImplTest {
 
         assertTrue(result is Result.Failure)
         assertTrue((result as Result.Failure).error is AppError.CredentialNotFound)
+    }
+
+    @Test
+    fun `fetchQuota returns NeedsLogin when saved manual response is unauthorized and no token exists`() = runTest {
+        `when`(prefsManager.loadCredential(AiService.CODEX)).thenReturn(
+            Credential.CodexCredential(
+                accessToken = "",
+                refreshToken = "",
+                manualResponse = """{"detail":"Unauthorized"}"""
+            )
+        )
+
+        val result = repository.fetchQuota()
+
+        assertTrue(result is Result.Failure)
+        assertTrue((result as Result.Failure).error is AppError.NeedsLogin)
+    }
+
+    @Test
+    fun `fetchQuota returns success from valid manual response`() = runTest {
+        val responseJson = """
+        {
+            "plan_type": "pro",
+            "rate_limit": {
+                "primary_window": {
+                    "used_percent": 45,
+                    "reset_at": 1234567890,
+                    "limit_window_seconds": 18000
+                }
+            }
+        }
+        """.trimIndent()
+
+        `when`(prefsManager.loadCredential(AiService.CODEX)).thenReturn(
+            Credential.CodexCredential(
+                accessToken = "",
+                refreshToken = "",
+                manualResponse = responseJson
+            )
+        )
+
+        val result = repository.fetchQuota()
+
+        assertTrue(result is Result.Success)
+        val quotaInfo = (result as Result.Success).value
+        assertEquals("Pro", quotaInfo.tier)
+        assertEquals(1, quotaInfo.windows.size)
     }
 
     @Test

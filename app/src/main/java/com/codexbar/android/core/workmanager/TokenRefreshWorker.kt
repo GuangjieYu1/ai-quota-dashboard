@@ -88,6 +88,8 @@ class TokenRefreshWorker @AssistedInject constructor(
     }
 
     private suspend fun refreshCodex(credential: Credential.CodexCredential): Boolean {
+        if (credential.refreshToken.isBlank()) return true
+
         // Codex has no expiry field — always attempt a proactive refresh
         return try {
             val request = CodexDto.TokenRefreshRequest(refreshToken = credential.refreshToken)

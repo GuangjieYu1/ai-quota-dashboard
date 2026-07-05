@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.codexbar.android.core.domain.model.AiService
 import com.codexbar.android.core.domain.model.AppError
+import com.codexbar.android.core.domain.model.DashboardThemeStyle
 import com.codexbar.android.core.domain.model.ProviderStatus
 import com.codexbar.android.core.domain.model.QuotaInfo
 import com.codexbar.android.core.domain.model.Result
@@ -41,6 +42,9 @@ class DashboardViewModel @Inject constructor(
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
+    private val _dashboardTheme = MutableStateFlow(prefsManager.getDashboardTheme())
+    val dashboardTheme: StateFlow<DashboardThemeStyle> = _dashboardTheme.asStateFlow()
+
     private val repoMap: Map<AiService, QuotaRepository> = mapOf(
         AiService.CLAUDE to claudeRepository,
         AiService.CODEX to codexRepository,
@@ -58,10 +62,11 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             _isRefreshing.value = true
             _uiState.value = DashboardUiState.Loading
+            _dashboardTheme.value = prefsManager.getDashboardTheme()
 
-            val alwaysShow = setOf(AiService.CHATGPT_PLUS, AiService.CODEX, AiService.DEEPSEEK, AiService.MIMO)
+            val enabledServices = prefsManager.getEnabledServices()
             val repos = repoMap.filterKeys { service ->
-                alwaysShow.contains(service) || prefsManager.hasCredential(service)
+                enabledServices.contains(service)
             }
 
             if (repos.isEmpty()) {
@@ -100,12 +105,11 @@ class DashboardViewModel @Inject constructor(
             }
 
             val sortedCards = successCards.sortedByDescending { card ->
-                card.windows.maxOfOrNull { it.utilization } ?: 0.0
+                maxUtilization(card)
             }.map { card ->
                 if (card.error != null) card.copy(status = mapErrorToStatus(card.error))
-                else if (card.windows.isEmpty()) card
                 else {
-                    val maxUtil = card.windows.maxOf { it.utilization }
+                    val maxUtil = maxUtilization(card)
                     val status = when {
                         maxUtil >= 1.0 -> ProviderStatus.ERROR
                         maxUtil >= 0.8 -> ProviderStatus.WARNING
@@ -120,19 +124,19 @@ class DashboardViewModel @Inject constructor(
 
             _uiState.value = when {
                 errors.isEmpty() -> DashboardUiState.Success(sortedCards, Instant.now())
-                allCredentialErrors -> {
-                    if (successCards.any { it.error == null }) {
-                        DashboardUiState.PartialSuccess(sortedCards, errors)
-                    } else {
-                        DashboardUiState.Success(emptyList(), Instant.now())
-                    }
-                }
+                allCredentialErrors -> DashboardUiState.Success(sortedCards, Instant.now())
                 successCards.all { it.error != null } -> DashboardUiState.Error(errors.values.first())
                 else -> DashboardUiState.PartialSuccess(sortedCards, errors)
             }
 
             _isRefreshing.value = false
         }
+    }
+
+    private fun maxUtilization(card: ServiceCardData): Double {
+        return card.windows.maxOfOrNull { it.utilization }
+            ?: card.extraUsage?.utilization
+            ?: 0.0
     }
 
     private fun mapErrorToStatus(error: AppError): ProviderStatus {

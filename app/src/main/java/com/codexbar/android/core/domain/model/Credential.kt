@@ -33,7 +33,8 @@ sealed class Credential {
         override val accessToken: String,
         override val refreshToken: String? = null,
         val baseUrl: String = "https://api.deepseek.com",
-        val initialTotal: Double = 0.0
+        val initialTotal: Double = 0.0,
+        val sessionCookie: String = ""
     ) : Credential()
 
     data class ChatGPTPlusCredential(

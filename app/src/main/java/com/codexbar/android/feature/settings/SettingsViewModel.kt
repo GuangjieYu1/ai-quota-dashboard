@@ -1,28 +1,35 @@
 package com.codexbar.android.feature.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.codexbar.android.core.domain.model.AiService
 import com.codexbar.android.core.domain.model.AppError
 import com.codexbar.android.core.domain.model.Credential
+import com.codexbar.android.core.domain.model.DashboardThemeStyle
 import com.codexbar.android.core.domain.model.Result
+import com.codexbar.android.core.network.codex.CodexDto
 import com.codexbar.android.core.domain.repository.QuotaRepository
+import com.codexbar.android.core.network.codex.CodexUsageResponseValidator
+import com.codexbar.android.core.network.codex.JsonSessionResponse
 import com.codexbar.android.core.security.EncryptedPrefsManager
+import com.codexbar.android.core.workmanager.WorkManagerInitializer
 import com.codexbar.android.di.ChatGPTPlusRepository
 import com.codexbar.android.di.ClaudeRepository
 import com.codexbar.android.di.CodexRepository
 import com.codexbar.android.di.DeepSeekRepository
 import com.codexbar.android.di.GeminiRepository
 import com.codexbar.android.di.MiMoRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -36,19 +43,25 @@ class SettingsViewModel @Inject constructor(
     @DeepSeekRepository private val deepSeekRepository: QuotaRepository,
     @ChatGPTPlusRepository private val chatGptPlusRepository: QuotaRepository,
     @MiMoRepository private val miMoRepository: QuotaRepository,
-    private val prefsManager: EncryptedPrefsManager
+    private val prefsManager: EncryptedPrefsManager,
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
-    private val saveJobs = mutableMapOf<AiService, Job>()
     private val pendingChanges = MutableStateFlow<Pair<AiService, String>?>(null)
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
 
     init {
         loadSavedCredentials()
         _uiState.update {
             it.copy(
+                enabledServices = prefsManager.getEnabledServices(),
+                dashboardTheme = prefsManager.getDashboardTheme(),
                 refreshIntervalMinutes = prefsManager.getRefreshInterval(),
                 notificationsEnabled = prefsManager.isNotificationsEnabled()
             )
@@ -80,7 +93,8 @@ class SettingsViewModel @Inject constructor(
                 is Credential.DeepSeekCredential -> ServiceCredentialState(
                     accessToken = credential.accessToken,
                     baseUrl = credential.baseUrl,
-                    initialTotal = if (credential.initialTotal > 0) credential.initialTotal.toString() else ""
+                    initialTotal = if (credential.initialTotal > 0) credential.initialTotal.toString() else "",
+                    sessionCookie = credential.sessionCookie
                 )
                 is Credential.ChatGPTPlusCredential -> ServiceCredentialState(
                     planName = credential.planName,
@@ -113,6 +127,7 @@ class SettingsViewModel @Inject constructor(
                 "oauthClientSecret" -> current.copy(oauthClientSecret = value, validationResult = null)
                 "baseUrl" -> current.copy(baseUrl = value, validationResult = null)
                 "initialTotal" -> current.copy(initialTotal = value, validationResult = null)
+                "sessionCookie" -> current.copy(sessionCookie = value, validationResult = null)
                 "planName" -> current.copy(planName = value, validationResult = null)
                 "renewalDate" -> current.copy(renewalDate = value, validationResult = null)
                 "billingPeriod" -> current.copy(billingPeriod = value, validationResult = null)
@@ -135,6 +150,23 @@ class SettingsViewModel @Inject constructor(
             state.copy(serviceStates = state.serviceStates + (service to current.copy(useBackendMode = useBackend)))
         }
         scheduleSave(service)
+    }
+
+    fun setProviderEnabled(service: AiService, enabled: Boolean) {
+        prefsManager.setProviderEnabled(service, enabled)
+        _uiState.update { state ->
+            val enabledServices = if (enabled) {
+                state.enabledServices + service
+            } else {
+                state.enabledServices - service
+            }
+            state.copy(enabledServices = enabledServices)
+        }
+    }
+
+    fun setDashboardTheme(style: DashboardThemeStyle) {
+        prefsManager.setDashboardTheme(style)
+        _uiState.update { it.copy(dashboardTheme = style) }
     }
 
     @OptIn(FlowPreview::class)
@@ -164,12 +196,17 @@ class SettingsViewModel @Inject constructor(
                 )
             }
             AiService.CODEX -> {
-                if (state.accessToken.isBlank() && state.refreshToken.isBlank() && state.manualResponse.isBlank()) return
+                val pastedResponse = state.manualResponse.trim()
+                val sessionAccessToken = parseCodexSessionAccessToken(pastedResponse)
+                val manualResponse = pastedResponse
+                    .takeIf { it.isNotBlank() && isValidCodexUsageResponse(it) }
+                val accessToken = sessionAccessToken ?: state.accessToken
+                if (accessToken.isBlank() && state.refreshToken.isBlank() && manualResponse == null) return
                 Credential.CodexCredential(
-                    accessToken = state.accessToken,
+                    accessToken = accessToken,
                     refreshToken = state.refreshToken,
                     accountId = state.accountId.ifBlank { null },
-                    manualResponse = state.manualResponse.ifBlank { null }
+                    manualResponse = if (sessionAccessToken != null) null else manualResponse
                 )
             }
             AiService.GEMINI -> {
@@ -184,14 +221,16 @@ class SettingsViewModel @Inject constructor(
                 )
             }
             AiService.DEEPSEEK -> {
-                if (state.accessToken.isBlank()) return
+                if (state.accessToken.isBlank() && state.sessionCookie.isBlank()) return
                 Credential.DeepSeekCredential(
                     accessToken = state.accessToken,
                     baseUrl = state.baseUrl.ifBlank { "https://api.deepseek.com" },
-                    initialTotal = state.initialTotal.toDoubleOrNull() ?: 0.0
+                    initialTotal = state.initialTotal.toDoubleOrNull() ?: 0.0,
+                    sessionCookie = state.sessionCookie
                 )
             }
             AiService.CHATGPT_PLUS -> {
+                if (state.renewalDate.isBlank() && state.manualSessionResponse.isBlank()) return
                 Credential.ChatGPTPlusCredential(
                     planName = state.planName.ifBlank { "Plus" },
                     renewalDate = state.renewalDate,
@@ -201,6 +240,8 @@ class SettingsViewModel @Inject constructor(
                 )
             }
             AiService.MIMO -> {
+                if (state.useBackendMode && state.backendUrl.isBlank()) return
+                if (!state.useBackendMode && state.directCookie.isBlank()) return
                 Credential.MiMoCredential(
                     backendUrl = state.backendUrl,
                     backendToken = state.backendToken,
@@ -211,6 +252,20 @@ class SettingsViewModel @Inject constructor(
         }
 
         prefsManager.saveCredential(service, credential)
+    }
+
+    private fun parseCodexSessionAccessToken(response: String): String? {
+        if (response.isBlank()) return null
+        return runCatching {
+            json.decodeFromString<JsonSessionResponse>(response).accessToken?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    private fun isValidCodexUsageResponse(response: String): Boolean {
+        return runCatching {
+            val usageResponse = json.decodeFromString<CodexDto.UsageResponse>(response)
+            CodexUsageResponseValidator.hasUsageData(usageResponse)
+        }.getOrDefault(false)
     }
 
     fun validateCredential(service: AiService) {
@@ -263,6 +318,7 @@ class SettingsViewModel @Inject constructor(
 
     fun setRefreshInterval(minutes: Long) {
         prefsManager.setRefreshInterval(minutes)
+        WorkManagerInitializer.scheduleConfiguredRefresh(appContext, prefsManager)
         _uiState.update { it.copy(refreshIntervalMinutes = minutes) }
     }
 
@@ -283,7 +339,10 @@ class SettingsViewModel @Inject constructor(
         prefsManager.deleteAllCredentials()
         _uiState.update {
             SettingsUiState(
-                refreshIntervalMinutes = it.refreshIntervalMinutes
+                enabledServices = prefsManager.getEnabledServices(),
+                dashboardTheme = prefsManager.getDashboardTheme(),
+                refreshIntervalMinutes = it.refreshIntervalMinutes,
+                notificationsEnabled = it.notificationsEnabled
             )
         }
     }
