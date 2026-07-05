@@ -20,6 +20,7 @@ import com.codexbar.android.core.widget.QuotaGlanceWidget
 import com.codexbar.android.core.widget.WidgetPrefsManager
 import com.codexbar.android.di.ChatGPTPlusRepository
 import com.codexbar.android.di.ClaudeRepository
+import com.codexbar.android.di.CodexFeelolRepository
 import com.codexbar.android.di.CodexRepository
 import com.codexbar.android.di.DeepSeekRepository
 import com.codexbar.android.di.GeminiRepository
@@ -38,6 +39,7 @@ class QuotaRefreshWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     @ClaudeRepository private val claudeRepository: QuotaRepository,
     @CodexRepository private val codexRepository: QuotaRepository,
+    @CodexFeelolRepository private val codexFeelolRepository: QuotaRepository,
     @GeminiRepository private val geminiRepository: QuotaRepository,
     @DeepSeekRepository private val deepSeekRepository: QuotaRepository,
     @ChatGPTPlusRepository private val chatGPTPlusRepository: QuotaRepository,
@@ -55,6 +57,9 @@ class QuotaRefreshWorker @AssistedInject constructor(
             }
             if (enabledServices.contains(AiService.CODEX) && prefsManager.hasCredential(AiService.CODEX)) {
                 add(AiService.CODEX to codexRepository)
+            }
+            if (enabledServices.contains(AiService.CODEX_FEELOL) && prefsManager.hasCredential(AiService.CODEX_FEELOL)) {
+                add(AiService.CODEX_FEELOL to codexFeelolRepository)
             }
             if (enabledServices.contains(AiService.GEMINI) && prefsManager.hasCredential(AiService.GEMINI)) {
                 add(AiService.GEMINI to geminiRepository)
