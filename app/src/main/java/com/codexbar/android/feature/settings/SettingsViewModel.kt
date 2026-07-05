@@ -16,6 +16,7 @@ import com.codexbar.android.core.security.EncryptedPrefsManager
 import com.codexbar.android.core.workmanager.WorkManagerInitializer
 import com.codexbar.android.di.ChatGPTPlusRepository
 import com.codexbar.android.di.ClaudeRepository
+import com.codexbar.android.di.CodexFeelolRepository
 import com.codexbar.android.di.CodexRepository
 import com.codexbar.android.di.DeepSeekRepository
 import com.codexbar.android.di.GeminiRepository
@@ -39,6 +40,7 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     @ClaudeRepository private val claudeRepository: QuotaRepository,
     @CodexRepository private val codexRepository: QuotaRepository,
+    @CodexFeelolRepository private val codexFeelolRepository: QuotaRepository,
     @GeminiRepository private val geminiRepository: QuotaRepository,
     @DeepSeekRepository private val deepSeekRepository: QuotaRepository,
     @ChatGPTPlusRepository private val chatGptPlusRepository: QuotaRepository,
@@ -81,6 +83,10 @@ class SettingsViewModel @Inject constructor(
                     accessToken = credential.accessToken,
                     refreshToken = credential.refreshToken,
                     accountId = credential.accountId ?: "",
+                    manualResponse = credential.manualResponse ?: ""
+                )
+                is Credential.CodexFeelolCredential -> ServiceCredentialState(
+                    accessToken = credential.accessToken,
                     manualResponse = credential.manualResponse ?: ""
                 )
                 is Credential.GeminiCredential -> ServiceCredentialState(
@@ -209,6 +215,14 @@ class SettingsViewModel @Inject constructor(
                     manualResponse = if (sessionAccessToken != null) null else manualResponse
                 )
             }
+            AiService.CODEX_FEELOL -> {
+                val pastedResponse = state.manualResponse.trim()
+                if (state.accessToken.isBlank() && pastedResponse.isBlank()) return
+                Credential.CodexFeelolCredential(
+                    accessToken = state.accessToken,
+                    manualResponse = pastedResponse.ifBlank { null }
+                )
+            }
             AiService.GEMINI -> {
                 if (state.accessToken.isBlank() || state.refreshToken.isBlank() ||
                     state.oauthClientId.isBlank() || state.oauthClientSecret.isBlank()) return
@@ -272,6 +286,7 @@ class SettingsViewModel @Inject constructor(
         val repo = when (service) {
             AiService.CLAUDE -> claudeRepository
             AiService.CODEX -> codexRepository
+            AiService.CODEX_FEELOL -> codexFeelolRepository
             AiService.GEMINI -> geminiRepository
             AiService.DEEPSEEK -> deepSeekRepository
             AiService.CHATGPT_PLUS -> chatGptPlusRepository
