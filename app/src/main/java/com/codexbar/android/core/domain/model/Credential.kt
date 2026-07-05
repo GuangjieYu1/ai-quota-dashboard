@@ -21,6 +21,12 @@ sealed class Credential {
         val manualResponse: String? = null
     ) : Credential()
 
+    data class CodexFeelolCredential(
+        override val accessToken: String = "",
+        override val refreshToken: String? = null,
+        val manualResponse: String? = null
+    ) : Credential()
+
     data class GeminiCredential(
         override val accessToken: String,
         override val refreshToken: String,
