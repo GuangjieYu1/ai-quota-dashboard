@@ -19,14 +19,82 @@ https://github.com/GuangjieYu1/ai-quota-dashboard/compare/main...codex/fix-quota
 1. Fix ChatGPT Plus validation when a valid `/api/auth/session` response is pasted but no renewal date is configured.
 2. Add `Codex (feelol)` as a separate provider backed by `https://feea.lol/api/v1/subscriptions?timezone=Asia%2FShanghai`.
 3. Parse feelol daily, weekly, and monthly usage/limit values, expiry, and reset windows.
-4. Improve DeepSeek login-cookie capture and browser-like API headers.
+4. DeepSeek should use the official API-key balance path only. Do not rely on `platform.deepseek.com` browser cookies for quota because that private web endpoint rejects the request in the Android app.
 5. Move feelol `expires_at` from the top tier chip into an `Expires` progress bar under `Monthly`.
+
+## DeepSeek Decision
+
+The browser-login / platform-cookie path is deprecated for this APK. It kept producing `DeepSeek summary rejected the request` because the app was not reliably capturing a complete authenticated browser session and the private platform summary endpoint is not a stable public API.
+
+Use the official API-key flow instead:
+
+- Settings should ask for `DeepSeek API Key`.
+- Repository calls `GET https://api.deepseek.com/user/balance` with `Authorization: Bearer <api key>`.
+- Ignore and clear old `sessionCookie` values.
+- A cookie-only DeepSeek credential must not count as configured.
+
+DeepSeek official docs describe using `https://api.deepseek.com` as the OpenAI-compatible base URL and `Authorization: Bearer ${DEEPSEEK_API_KEY}` for API calls.
 
 ## Important Correction: Theme Means UI Preset, Not Palette
 
 The previous implementation treated themes as color/layout tokens: background color, card radius, spacing, elevation, compactness. This is not enough.
 
-The intended feature is a set of complete dashboard UI presets, similar to the provided references:
+The intended feature is a set of complete dashboard UI presets. The user specifically wants these three families:
+
+1. `LEGO_BRICK`
+   - Toy-like modular dashboard.
+   - Bright plastic block panels.
+   - Thick outlines, chunky rounded rectangles, studs/dots as decorative anchors.
+   - Provider cards look like connected bricks.
+   - Quota bars look like stacked brick segments.
+   - Friendly, playful, very readable on phone.
+
+2. `ANIME_HUD`
+   - 二次元风格 dashboard.
+   - Soft gradient or illustrated background layer.
+   - Rounded translucent cards, sparkle/energy accents.
+   - Provider tabs can look like character badges or skill cards.
+   - Quota windows can be rendered as status bars / energy bars.
+   - Must remain non-copyrighted and generic; do not copy any specific anime IP.
+
+3. `MONITOR_PANEL`
+   - The style represented by the reference screenshots.
+   - Includes dark terminal grid, glass lab, and detailed ledger variants.
+   - This should feel like a usage monitor / aircraft cockpit / ClaudeBar-style control panel, not normal Material cards.
+
+Keep `MOBILE_NATIVE` as the safe default fallback.
+
+## Required Architecture Change
+
+Do not keep extending `DashboardThemePalette` as if themes are just colors.
+
+Introduce a separate concept:
+
+```kotlin
+enum class DashboardLayoutPreset {
+    MOBILE_NATIVE,
+    LEGO_BRICK,
+    ANIME_HUD,
+    MONITOR_PANEL
+}
+```
+
+Route dashboard rendering by preset:
+
+```kotlin
+when (layoutPreset) {
+    MOBILE_NATIVE -> MobileNativeDashboard(...)
+    LEGO_BRICK -> LegoBrickDashboard(...)
+    ANIME_HUD -> AnimeHudDashboard(...)
+    MONITOR_PANEL -> MonitorPanelDashboard(...)
+}
+```
+
+`DashboardThemePalette` can remain as internal tokens, but it must no longer be the main theme abstraction.
+
+## Monitor Panel Submodes
+
+`MONITOR_PANEL` may internally support three layouts:
 
 1. `Console Grid`
    - Dark terminal style.
@@ -52,45 +120,14 @@ The intended feature is a set of complete dashboard UI presets, similar to the p
    - Secondary stats section: cost, tokens, latest tokens, reset credits.
    - Mini histogram/log-derived section can be placeholder until data exists.
 
-4. `Mobile Native`
-   - Current mobile list layout.
-   - Simple vertical service cards.
-   - Best for small screens and low implementation risk.
-
-## Required Architecture Change
-
-Do not keep extending `DashboardThemePalette` as if themes are just colors.
-
-Introduce a separate concept:
-
-```kotlin
-enum class DashboardLayoutPreset {
-    MOBILE_NATIVE,
-    CONSOLE_GRID,
-    GLASS_LAB,
-    DETAIL_LEDGER
-}
-```
-
-Keep color palette as a sub-token of each preset, but route rendering by preset:
-
-```kotlin
-when (layoutPreset) {
-    MOBILE_NATIVE -> MobileNativeDashboard(...)
-    CONSOLE_GRID -> ConsoleGridDashboard(...)
-    GLASS_LAB -> GlassLabDashboard(...)
-    DETAIL_LEDGER -> DetailLedgerDashboard(...)
-}
-```
-
 ## Implementation Plan for UI Presets
 
 ### Phase UI-1: Data model and settings
 
 - Add `DashboardLayoutPreset` enum.
 - Store selected preset in `EncryptedPrefsManager` or existing settings storage.
-- Settings screen should show presets with preview names, not just color dots.
-- Keep current `DashboardThemeStyle` only as palette if needed, or fold it into preset tokens.
+- Settings screen should show preset preview cards, not just color dots.
+- Preset choices shown to user: `Mobile Native`, `Lego Brick`, `Anime HUD`, `Monitor Panel`.
 
 ### Phase UI-2: Extract current screen
 
@@ -98,31 +135,25 @@ when (layoutPreset) {
 - Preserve existing behavior and data flow.
 - Keep it as the default preset to avoid breaking existing APK behavior.
 
-### Phase UI-3: Add Console Grid
+### Phase UI-3: Add Lego Brick
 
-- Add `ConsoleGridDashboard.kt`.
-- Header: avatar, `AI Quota`/`ClaudeBar` style title, `usage monitor` subtitle, sync badge.
-- Provider pills row: enabled providers.
-- Metric cards: flatten selected service windows into tile cards.
-- Phone layout: vertical list; tablet/wide layout: 2-column grid.
-- Use terminal dark tokens and neon accent.
+- Add `LegoBrickDashboard.kt`.
+- Use chunky cards, block spacing, and segmented brick quota bars.
+- Provider icon/avatar should sit in circular or square plastic-brick badge.
+- Avoid brand/IP copying; keep it inspired by construction toys, not literal LEGO logos.
 
-### Phase UI-4: Add Glass Lab
+### Phase UI-4: Add Anime HUD
 
-- Add `GlassLabDashboard.kt`.
-- Soft gradient background.
-- Floating panel/card container.
-- Provider tabs as rounded pills.
-- Metric cards in 2-column grid where possible.
-- Keep mobile fallback to 1-column.
+- Add `AnimeHudDashboard.kt`.
+- Use generic anime-inspired HUD styling: translucent panels, energy bars, small sparkle accents.
+- Avoid copyrighted characters or specific franchise design language.
+- Keep accessibility: contrast and text size must remain readable.
 
-### Phase UI-5: Add Detail Ledger
+### Phase UI-5: Add Monitor Panel
 
-- Add `DetailLedgerDashboard.kt`.
-- Single selected provider at a time.
-- Detailed bars for all windows.
-- Extra usage and last updated sections.
-- Histogram section should be placeholder if logs are not available.
+- Add `MonitorPanelDashboard.kt`.
+- Start with dark console grid as MVP.
+- Later add glass and ledger submodes if time permits.
 
 ## Already Implemented in This Branch
 
@@ -136,8 +167,8 @@ when (layoutPreset) {
 - dashboard and worker repository wiring
 - token worker skips feelol refresh
 - ChatGPT Plus session JSON validate fallback
-- DeepSeek headers and cookie capture relaxation
-- DeepSeek cookie validation: reject incomplete cookie values without `name=value`
+- DeepSeek switched to API-key-only credential path
+- old DeepSeek platform cookie no longer counts as a valid credential
 - feelol expiry moved into an `Expires` usage window
 - preliminary theme tokens, but this is not the final theme architecture
 
