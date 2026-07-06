@@ -50,22 +50,20 @@ class DeepSeekRepositoryImpl @Inject constructor(
     private suspend fun fetchQuotaFromUserSummary(
         credential: Credential.DeepSeekCredential
     ): Result<QuotaInfo, AppError> {
+        val cookie = normalizeCookie(credential.sessionCookie)
+        validateCookieHeader(cookie)?.let { message ->
+            return Result.Failure(AppError.ParseError(message))
+        }
+
         return try {
-            val response = apiService.getUserSummary(cookie = credential.sessionCookie)
+            val response = apiService.getUserSummary(cookie = cookie)
             when (response.code()) {
                 200 -> {
                     val body = response.body()
                         ?: return Result.Failure(AppError.ParseError("Empty response body"))
                     if (body.code != null && body.code != 0) {
                         val message = body.message ?: "DeepSeek summary rejected the request"
-                        return if (message.contains("token", ignoreCase = true) ||
-                            message.contains("auth", ignoreCase = true) ||
-                            message.contains("login", ignoreCase = true)
-                        ) {
-                            Result.Failure(AppError.AuthError(AiService.DEEPSEEK, isTerminal = true, message = message))
-                        } else {
-                            Result.Failure(AppError.ParseError(message))
-                        }
+                        return Result.Failure(AppError.ParseError(message))
                     }
                     Result.Success(mapUserSummaryToQuotaInfo(body))
                 }
@@ -145,7 +143,7 @@ class DeepSeekRepositoryImpl @Inject constructor(
                 ProviderQuota(
                     id = id,
                     displayName = displayName,
-                    status = when (val err = result.error) {
+                    status = when (result.error) {
                         is AppError.AuthError -> ProviderStatus.NEEDS_LOGIN
                         is AppError.CredentialNotFound -> ProviderStatus.NEEDS_LOGIN
                         else -> ProviderStatus.ERROR
@@ -212,6 +210,21 @@ class DeepSeekRepositoryImpl @Inject constructor(
         )
     }
 
+    private fun normalizeCookie(cookie: String): String {
+        return cookie.trim()
+            .removePrefix("Cookie:")
+            .removePrefix("cookie:")
+            .trim()
+    }
+
+    private fun validateCookieHeader(cookie: String): String? {
+        if (cookie.isBlank()) return "DeepSeek cookie is empty"
+        if (!cookie.contains("=")) {
+            return "DeepSeek cookie is incomplete. Paste the full Cookie header, for example: name=value; name2=value2"
+        }
+        return null
+    }
+
     private fun findDouble(element: JsonElement?, key: String): Double? {
         val value = findPrimitive(element, key)?.contentOrNull ?: return null
         return value
@@ -251,9 +264,9 @@ class DeepSeekRepositoryImpl @Inject constructor(
     private fun formatError(error: AppError): String {
         return when (error) {
             is AppError.NetworkError -> "Network error"
-            is AppError.AuthError -> if (error.isTerminal) "Invalid API Key" else "Auth error"
+            is AppError.AuthError -> error.message.ifBlank { if (error.isTerminal) "Invalid API Key" else "Auth error" }
             is AppError.RateLimited -> "Rate limited"
-            is AppError.ParseError -> "Parse error"
+            is AppError.ParseError -> error.message
             is AppError.CredentialNotFound -> "Not configured"
             is AppError.ServiceUnavailable -> "Service unavailable"
             is AppError.NeedsLogin -> error.message
