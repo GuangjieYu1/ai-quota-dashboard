@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="780" viewBox="0 0 360 780" role="img" aria-label="AI Quota mobile native dashboard screenshot preview">
+  <defs><linearGradient id="bar" x1="0" x2="1"><stop stop-color="#42cddd"/><stop offset="1" stop-color="#67e0ec"/></linearGradient></defs>
+  <rect width="360" height="780" fill="#10131b" rx="30"/>
+  <rect y="0" width="360" height="106" fill="#111821"/>
+  <text x="24" y="74" fill="#f2f7ff" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="500">AI Quota</text>
+  <text x="315" y="74" fill="#f2f7ff" font-family="Arial" font-size="26">⚙</text>
+  <g font-family="Inter, Arial, sans-serif">
+    <rect x="15" y="122" width="330" height="226" rx="12" fill="#17222c" stroke="#1d2a36"/>
+    <circle cx="48" cy="160" r="21" fill="#0c382f"/><text x="36" y="167" fill="#57d991" font-size="14">FL</text>
+    <text x="76" y="154" fill="#f5f7fb" font-size="21" font-weight="700">Codex</text><text x="76" y="184" fill="#f5f7fb" font-size="20" font-weight="700">(feelol)</text>
+    <rect x="180" y="151" width="104" height="22" rx="11" fill="#34404b"/><text x="190" y="167" fill="#c6cbd1" font-size="12">codex-vip</text><rect x="296" y="151" width="34" height="22" rx="11" fill="#194c3c"/><text x="304" y="167" fill="#63dc98" font-size="12" font-weight="700">OK</text>
+    <text x="30" y="220" fill="#aeb7c2" font-size="15">Daily</text><rect x="108" y="214" width="170" height="8" rx="4" fill="#3b4651"/><rect x="108" y="214" width="160" height="8" rx="4" fill="url(#bar)"/><text x="292" y="222" fill="#67e0ec" font-size="14">95% left</text><text x="240" y="242" fill="#aeb7c2" font-size="13">Resets in 23h</text>
+    <text x="30" y="261" fill="#aeb7c2" font-size="15">Weekly</text><rect x="108" y="255" width="170" height="8" rx="4" fill="#3b4651"/><rect x="108" y="255" width="146" height="8" rx="4" fill="url(#bar)"/><text x="292" y="263" fill="#67e0ec" font-size="14">86% left</text><text x="246" y="283" fill="#aeb7c2" font-size="13">Resets in 5d</text>
+    <text x="30" y="302" fill="#aeb7c2" font-size="15">Monthly</text><rect x="108" y="296" width="170" height="8" rx="4" fill="#3b4651"/><rect x="108" y="296" width="160" height="8" rx="4" fill="url(#bar)"/><text x="292" y="304" fill="#67e0ec" font-size="14">94% left</text><text x="30" y="329" fill="#87909a" font-size="13">Updated: 00:54</text>
+
+    <rect x="15" y="360" width="330" height="150" rx="12" fill="#17222c" stroke="#1d2a36"/>
+    <circle cx="48" cy="396" r="21" fill="#3a2218"/><text x="42" y="403" fill="#ff7332" font-size="15">M</text><text x="76" y="404" fill="#f5f7fb" font-size="20" font-weight="700">MiMo Token Plan</text><rect x="296" y="383" width="34" height="22" rx="11" fill="#194c3c"/><text x="304" y="399" fill="#63dc98" font-size="12" font-weight="700">OK</text>
+    <text x="30" y="443" fill="#aeb7c2" font-size="15">Tokens</text><rect x="108" y="437" width="170" height="8" rx="4" fill="#3b4651"/><rect x="108" y="437" width="168" height="8" rx="4" fill="url(#bar)"/><text x="292" y="445" fill="#67e0ec" font-size="14">99% left</text>
+    <text x="30" y="477" fill="#aeb7c2" font-size="15">Plan Expires</text><rect x="108" y="471" width="170" height="8" rx="4" fill="#3b4651"/><rect x="108" y="471" width="85" height="8" rx="4" fill="url(#bar)"/><text x="292" y="479" fill="#67e0ec" font-size="14">15 / 30</text>
+
+    <rect x="15" y="522" width="330" height="150" rx="12" fill="#17222c" stroke="#1d2a36"/>
+    <circle cx="48" cy="558" r="21" fill="#093b33"/><text x="37" y="564" fill="#27d4a2" font-size="14">AI</text><text x="76" y="566" fill="#f5f7fb" font-size="20" font-weight="700">Codex</text><rect x="296" y="545" width="34" height="22" rx="11" fill="#194c3c"/><text x="304" y="561" fill="#63dc98" font-size="12" font-weight="700">OK</text>
+    <text x="30" y="606" fill="#aeb7c2" font-size="15">5h Usage</text><rect x="108" y="600" width="170" height="8" rx="4" fill="#3b4651"/><rect x="108" y="600" width="168" height="8" rx="4" fill="url(#bar)"/><text x="292" y="608" fill="#67e0ec" font-size="14">99% left</text>
+    <text x="30" y="640" fill="#aeb7c2" font-size="15">7d Usage</text><rect x="108" y="634" width="170" height="8" rx="4" fill="#3b4651"/><rect x="108" y="634" width="87" height="8" rx="4" fill="url(#bar)"/><text x="292" y="642" fill="#67e0ec" font-size="14">51% left</text>
+  </g>
+</svg>
