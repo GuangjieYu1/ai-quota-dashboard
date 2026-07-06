@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="780" viewBox="0 0 360 780" role="img" aria-label="AI Quota cyberpunk grid dashboard screenshot preview">
+  <defs>
+    <pattern id="grid" width="22" height="22" patternUnits="userSpaceOnUse"><path d="M22 0H0V22" fill="none" stroke="#3b2410" stroke-width="1" opacity=".72"/></pattern>
+    <linearGradient id="amber" x1="0" x2="1"><stop stop-color="#ff8b1a"/><stop offset="1" stop-color="#ffbf4a"/></linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="360" height="780" rx="30" fill="#050505"/>
+  <rect width="360" height="780" rx="30" fill="url(#grid)" opacity=".92"/>
+  <rect x="14" y="20" width="332" height="68" fill="#080807" stroke="#ff941d" stroke-width="2" rx="3"/>
+  <text x="28" y="51" fill="#ff9d25" font-family="monospace" font-size="22" font-weight="700">CYBERPUNK GRID</text>
+  <text x="28" y="72" fill="#e5b982" font-family="monospace" font-size="12">RELAY ONLINE / 5 NODES</text>
+  <rect x="258" y="40" width="72" height="31" rx="3" fill="url(#amber)"/><text x="270" y="61" fill="#16120e" font-family="monospace" font-size="14" font-weight="700">S1/S2</text>
+  <g stroke="#ff941d" stroke-width="2" fill="#090908">
+    <rect x="14" y="106" width="332" height="196" rx="4"/><rect x="14" y="323" width="332" height="196" rx="4"/><rect x="14" y="540" width="332" height="196" rx="4"/>
+  </g>
+  <g font-family="monospace" fill="#ffc37a">
+    <g transform="translate(28 126)">
+      <rect width="32" height="30" fill="url(#amber)" rx="3"/><text x="7" y="21" fill="#14110d" font-size="18" font-weight="700">S1</text><circle cx="83" cy="15" r="15" fill="#07391f"/><text x="75" y="21" fill="#24d98a" font-size="15">FL</text><text x="108" y="16" font-size="18" font-weight="700">CODEX (FEELOL)</text><text x="108" y="39" fill="#b08a5e" font-size="13">RELAY feea.lol</text><text x="295" y="22" fill="#ffb15a" font-size="13" font-weight="700">OK</text>
+      <line x1="0" y1="70" x2="304" y2="70" stroke="#ff941d" stroke-width="1.5" stroke-dasharray="4 4"/><circle cx="58" cy="70" r="4" fill="#ff9d25"/><circle cx="150" cy="70" r="4" fill="#ff9d25"/><circle cx="255" cy="70" r="4" fill="#ff9d25"/>
+      <circle cx="68" cy="139" r="47" fill="none" stroke="#382006" stroke-width="11"/><path d="M68 92 A47 47 0 1 1 36 174" fill="none" stroke="url(#amber)" stroke-width="11" stroke-linecap="round" filter="url(#glow)"/><text x="42" y="144" fill="#ff9d25" font-size="25" font-weight="700">47%</text><text x="49" y="166" fill="#d5a66a" font-size="13">LEFT</text>
+      <g transform="translate(145 105)" font-size="12"><text y="0">DAILY</text><rect x="0" y="9" width="188" height="6" fill="#3b2a12"/><rect x="0" y="9" width="180" height="6" fill="url(#amber)"/><text x="169" y="0">96%</text><text y="34">WEEKLY</text><rect x="0" y="43" width="188" height="6" fill="#3b2a12"/><rect x="0" y="43" width="164" height="6" fill="url(#amber)"/><text x="169" y="34">87%</text><text y="68">MONTHLY</text><rect x="0" y="77" width="188" height="6" fill="#3b2a12"/><rect x="0" y="77" width="178" height="6" fill="url(#amber)"/><text x="169" y="68">95%</text></g>
+    </g>
+    <g transform="translate(28 343)">
+      <rect width="32" height="30" fill="url(#amber)" rx="3"/><text x="7" y="21" fill="#14110d" font-size="18" font-weight="700">S2</text><circle cx="83" cy="15" r="15" fill="#3a1909"/><text x="78" y="21" fill="#ff6b1a" font-size="15">M</text><text x="108" y="16" font-size="18" font-weight="700">MIMO TOKEN PLAN</text><text x="108" y="39" fill="#b08a5e" font-size="13">RELAY platform.xiaomimimo.com</text><text x="295" y="22" fill="#ffb15a" font-size="13" font-weight="700">OK</text>
+      <line x1="0" y1="70" x2="304" y2="70" stroke="#ff941d" stroke-width="1.5" stroke-dasharray="4 4"/><circle cx="58" cy="70" r="4" fill="#ff9d25"/><circle cx="150" cy="70" r="4" fill="#ff9d25"/><circle cx="255" cy="70" r="4" fill="#ff9d25"/>
+      <circle cx="68" cy="139" r="47" fill="none" stroke="#382006" stroke-width="11"/><path d="M68 92 A47 47 0 1 1 35 173" fill="none" stroke="url(#amber)" stroke-width="11" stroke-linecap="round"/><text x="42" y="144" fill="#ff9d25" font-size="25" font-weight="700">50%</text><text x="49" y="166" fill="#d5a66a" font-size="13">LEFT</text>
+      <g transform="translate(145 120)" font-size="12"><text y="0">TOKENS</text><rect x="0" y="9" width="188" height="6" fill="#3b2a12"/><rect x="0" y="9" width="186" height="6" fill="url(#amber)"/><text x="169" y="0">99%</text><text y="34">PLAN EXPIRES</text><rect x="0" y="43" width="188" height="6" fill="#3b2a12"/><rect x="0" y="43" width="94" height="6" fill="url(#amber)"/><text x="169" y="34">50%</text></g>
+    </g>
+    <g transform="translate(28 560)">
+      <rect width="32" height="30" fill="url(#amber)" rx="3"/><text x="7" y="21" fill="#14110d" font-size="18" font-weight="700">S3</text><circle cx="83" cy="15" r="15" fill="#07391f"/><text x="75" y="21" fill="#20d99a" font-size="14">AI</text><text x="108" y="16" font-size="18" font-weight="700">CODEX</text><text x="108" y="39" fill="#b08a5e" font-size="13">RELAY chatgpt.com</text><text x="295" y="22" fill="#ffb15a" font-size="13" font-weight="700">OK</text>
+      <line x1="0" y1="70" x2="304" y2="70" stroke="#ff941d" stroke-width="1.5" stroke-dasharray="4 4"/><circle cx="58" cy="70" r="4" fill="#ff9d25"/><circle cx="150" cy="70" r="4" fill="#ff9d25"/><circle cx="255" cy="70" r="4" fill="#ff9d25"/>
+      <circle cx="68" cy="139" r="47" fill="none" stroke="#382006" stroke-width="11"/><path d="M68 92 A47 47 0 0 1 103 170" fill="none" stroke="url(#amber)" stroke-width="11" stroke-linecap="round"/><text x="42" y="144" fill="#ff9d25" font-size="25" font-weight="700">51%</text><text x="49" y="166" fill="#d5a66a" font-size="13">LEFT</text>
+    </g>
+  </g>
+</svg>

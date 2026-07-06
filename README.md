@@ -1,98 +1,180 @@
 # AI Quota Dashboard
 
-Android app for monitoring AI service plans and quotas. Forked from [hyunnnchoi/CodexBar-android](https://github.com/hyunnnchoi/CodexBar-android).
+A mobile quota cockpit for tracking AI subscriptions, API balances, and usage windows across ChatGPT Plus, Codex, Codex (feelol), DeepSeek, MiMo, Claude, and Gemini.
+
+Forked from [hyunnnchoi/CodexBar-android](https://github.com/hyunnnchoi/CodexBar-android), then rebuilt around Android, Jetpack Compose, encrypted local credentials, and multiple dashboard styles.
+
+> Not an official OpenAI, Anthropic, DeepSeek, Google, Xiaomi, or feea.lol application. Credentials are provided by the user and stored locally on the device.
+
+## Preview
+
+<table>
+  <tr>
+    <td align="center" width="25%">
+      <img src="docs/screenshots/cyberpunk-grid.svg" width="180" alt="Cyberpunk Grid dashboard"/><br/>
+      <strong>Cyberpunk Grid</strong><br/>
+      <sub>black-orange relay cockpit</sub>
+    </td>
+    <td align="center" width="25%">
+      <img src="docs/screenshots/mobile-native.svg" width="180" alt="Mobile Native dashboard"/><br/>
+      <strong>Mobile Native</strong><br/>
+      <sub>compact Android cards</sub>
+    </td>
+    <td align="center" width="25%">
+      <img src="docs/screenshots/lego-brick.svg" width="180" alt="Lego Brick dashboard"/><br/>
+      <strong>Lego Brick</strong><br/>
+      <sub>chunky block progress</sub>
+    </td>
+    <td align="center" width="25%">
+      <img src="docs/screenshots/monitor-panel.svg" width="180" alt="Monitor Panel dashboard"/><br/>
+      <strong>Monitor Panel</strong><br/>
+      <sub>usage monitor / control panel</sub>
+    </td>
+  </tr>
+</table>
+
+## Highlights
+
+- **Multi-provider quota dashboard** for ChatGPT Plus, Codex, Codex (feelol), DeepSeek, MiMo, Claude, and Gemini.
+- **Quota windows** for short-cycle limits such as Codex 5h / 7d, feelol daily / weekly / monthly, MiMo tokens, and plan expiry.
+- **Dashboard layout presets** designed as full UI skins, not just color swaps:
+  - `MOBILE_NATIVE`: native Compose cards for everyday use.
+  - `LEGO_BRICK`: toy-like modular cards and segmented brick progress bars.
+  - `CYBERPUNK_GRID`: black-orange grid, relay nodes, S1/S2/S3 labels, circular gauge feel.
+  - `MONITOR_PANEL`: usage monitor layout with provider tabs, metric tiles, and health summary.
+- **Local credential storage** with Android EncryptedSharedPreferences.
+- **No release logging of secrets**. API keys, tokens, cookies, and session responses should never be printed to logcat.
 
 ## Supported Providers
 
-| Provider | Type | Auth |
-|----------|------|------|
-| **ChatGPT Plus** | Manual plan (renewal date) | None (date only) |
-| **Codex** | API quota (5h + 7d windows) | ChatGPT session token |
-| **DeepSeek** | API balance | API Key (sk-...) |
-| **MiMo Token Plan** | Token usage | Backend URL or Direct Cookie |
-| Claude | API quota (legacy) | Access token |
-| Gemini | API quota (legacy) | OAuth token |
+| Provider | What it shows | Auth / input |
+|---|---|---|
+| **ChatGPT Plus** | Plan metadata and renewal information from ChatGPT session JSON | ChatGPT session response |
+| **Codex** | 5h and 7d usage windows | ChatGPT session access token or saved usage JSON |
+| **Codex (feelol)** | Daily, weekly, monthly usage, plus plan expiry | feea.lol bearer token or subscriptions JSON |
+| **DeepSeek** | API balance: total / granted / topped-up balance | DeepSeek API key |
+| **MiMo Token Plan** | Token balance and plan expiry | Backend URL or direct cookie mode |
+| **Claude** | Legacy quota integration | Access token |
+| **Gemini** | Legacy OAuth quota integration | OAuth token |
 
-## Development Preview
+## Provider Notes
 
-This project supports a **Mock Mode** (`AppConfig.USE_MOCK_DATA = true`) that renders four provider cards with fake data—no API keys or credentials needed.
+### Codex
 
-### 1. Android Studio Preview (no build required)
+Codex usage is queried through ChatGPT-backed session credentials. The app should not ask users to open `backend-api/wham/usage` directly in a browser because that endpoint requires a bearer token. The expected flow is:
 
-1. Open `MockDashboardScreen.kt`
-2. At the bottom, find `DashboardPhonePreview` and `DashboardTabletPreview`
-3. Click the split/design view icon in the top-right of the editor
-4. Or right-click the Preview annotation → "Show Preview"
+1. Open ChatGPT session JSON while signed in.
+2. Extract `accessToken`.
+3. Let the app call the Codex usage API with `Authorization: Bearer <accessToken>`.
 
-You should see:
-- **Phone view (390×844)**: Single column of 4 provider cards
-- **Tablet view (800×1280)**: Adaptive grid (2 columns)
+### Codex (feelol)
 
-### 2. Run on Emulator
+The feea.lol integration uses:
 
-**Android Studio:**
-1. Device Manager → Create Virtual Device → Pixel 8 or Tablet
-2. Select a system image (API 26+)
-3. Run app
+```text
+https://feea.lol/api/v1/subscriptions?timezone=Asia%2FShanghai
+```
 
-**Command line:**
+It maps:
+
+- `daily_usage_usd / daily_limit_usd` → Daily quota window
+- `weekly_usage_usd / weekly_limit_usd` → Weekly quota window
+- `monthly_usage_usd / monthly_limit_usd` → Monthly quota window
+- `starts_at / expires_at` → Expires progress bar
+
+### DeepSeek
+
+DeepSeek is API-key only. The previous browser-cookie path against `platform.deepseek.com` is intentionally deprecated because it depends on a private web endpoint and can reject Android WebView requests.
+
+The stable path is:
+
+```text
+GET https://api.deepseek.com/user/balance
+Authorization: Bearer <DeepSeek API Key>
+```
+
+The official balance response exposes current balance values. If you want estimated spend, configure an optional initial total so the app can derive:
+
+```text
+used = initialTotal - total_balance
+```
+
+## Build
+
+### Debug APK
+
 ```bash
-export ANDROID_HOME=/home/user/Android
-emulator -avd <avd_name>
-./gradlew installDebug
+./gradlew clean assembleDebug --no-daemon
 ```
 
-### 3. Build Debug APK
+Output:
+
+```text
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Install locally
+
 ```bash
-export ANDROID_HOME=/home/user/Android
-./gradlew assembleDebug
-```
-APK: `app/build/outputs/apk/debug/app-debug.apk`
-
-### Switching Mock / Live Mode
-
-Edit `app/src/main/java/com/codexbar/android/core/config/AppConfig.kt`:
-```kotlin
-object AppConfig {
-    const val USE_MOCK_DATA = true   // ← toggle this
-}
+adb uninstall com.codexbar.android
+adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
-| Value | Behavior |
-|-------|----------|
-| `true` | Shows 4 mock cards, no credentials needed, no network calls |
-| `false` | Normal Hilt-based flow, requires configured credentials |
+For clean testing after auth-flow changes:
+
+```bash
+adb shell pm clear com.codexbar.android
+```
+
+## Configuration
+
+1. Open **Settings** from the top-right gear.
+2. Enable the providers you want to track.
+3. Configure credentials per provider.
+4. Choose a dashboard layout preset.
+5. Validate each provider before relying on the dashboard.
+
+Recommended first-run order:
+
+```text
+Codex (feelol) → Codex → ChatGPT Plus → MiMo → DeepSeek
+```
+
+## Security Model
+
+- Credentials are stored locally with `EncryptedSharedPreferences`.
+- The app does not need a custom backend for the default local mode.
+- MiMo backend mode is supported for safer server-side cookie handling.
+- Direct cookie modes are treated as advanced and should be avoided unless necessary.
+- User can delete all credentials from Settings.
 
 ## Architecture
 
-```
+```text
 core/
-├── domain/model/        # Data models (QuotaInfo, ProviderQuota, etc.)
+├── domain/model/        # QuotaInfo, UsageWindow, Credential, provider models
 ├── domain/repository/   # QuotaRepository + QuotaProvider interfaces
-├── data/               # Repository implementations per provider
-├── network/            # Retrofit API services + DTOs per provider
-└── security/           # EncryptedSharedPreferences
+├── data/                # Repository implementations per provider
+├── network/             # Retrofit API services + DTOs per provider
+└── security/            # EncryptedSharedPreferences
 feature/
-├── dashboard/          # Main quota cards UI
-└── settings/           # Per-provider configuration
-di/                     # Hilt DI modules
+├── dashboard/           # Dashboard screens, service cards, layout presets
+└── settings/            # Provider configuration and validation
+di/                      # Hilt modules
 ```
 
-## Configuration (Live Mode)
+## Development Checklist
 
-1. Open Settings from the top bar
-2. Configure each provider:
-   - **ChatGPT Plus**: Enter plan name + renewal date
-   - **Codex**: Enter access token + refresh token from ChatGPT session
-   - **DeepSeek**: Enter API Key (sk-...)
-   - **MiMo**: Choose Backend URL mode (recommended) or Direct Cookie
+Before sharing a build:
 
-## Security
-
-- All credentials stored in EncryptedSharedPreferences (AES-256-GCM)
-- HTTP logging set to BASIC level only (no headers/body in release builds)
-- MiMo Direct Cookie mode marked as advanced/unsafe
-- No credentials logged to logcat
+```text
+[ ] ./gradlew clean assembleDebug passes
+[ ] DeepSeek Settings only shows API Key / Base URL / Initial Total
+[ ] Codex(feelol) shows Daily / Weekly / Monthly / Expires
+[ ] ChatGPT Plus session JSON validates without renewal-date-only fallback errors
+[ ] No token, cookie, API key, or session JSON appears in logs
+[ ] Dashboard presets can be switched without crashing
+```
 
 ## License
 

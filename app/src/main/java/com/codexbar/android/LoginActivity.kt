@@ -74,13 +74,15 @@ class LoginActivity : ComponentActivity() {
         private val LOGIN_URLS = mapOf(
             AiService.CODEX to CodexUrls.LOGIN,
             AiService.CHATGPT_PLUS to CodexUrls.LOGIN,
+            AiService.CODEX_FEELOL to "https://feea.lol/subscriptions",
             AiService.DEEPSEEK to AiService.DEEPSEEK.homeUrl,
             AiService.MIMO to "https://platform.xiaomimimo.com/auth/login"
         )
 
         private val API_URLS = mapOf(
             AiService.CHATGPT_PLUS to CodexUrls.SESSION_API,
-            AiService.CODEX to CodexUrls.SESSION_API
+            AiService.CODEX to CodexUrls.SESSION_API,
+            AiService.CODEX_FEELOL to "https://feea.lol/api/v1/subscriptions?timezone=Asia%2FShanghai"
         )
 
         fun loginUrl(service: AiService): String =
@@ -93,123 +95,16 @@ class LoginActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         val serviceName = intent.getStringExtra(EXTRA_SERVICE) ?: ""
         val service = AiService.entries.find { it.name == serviceName } ?: AiService.CHATGPT_PLUS
 
         setContent {
             CodexBarTheme {
-                if (service == AiService.CODEX) {
-                    CodexBrowserHelperScreen(onCancel = { finish() })
-                } else {
-                    LoginScreen(
-                        service = service,
-                        initialUrl = loginUrl(service),
-                        onCancel = { finish() }
-                    )
-                }
-            }
-        }
-    }
-
-    @OptIn(ExperimentalMaterial3Api::class)
-    @androidx.compose.runtime.Composable
-    private fun CodexBrowserHelperScreen(onCancel: () -> Unit) {
-        var statusText by remember { mutableStateOf("") }
-        var manualInput by remember { mutableStateOf("") }
-
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            ServiceBrandIcon(service = AiService.CODEX, size = 24.dp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Login: ${AiService.CODEX.displayName}")
-                        }
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onCancel) {
-                            Icon(Icons.Default.Close, contentDescription = "Cancel")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
+                LoginScreen(
+                    service = service,
+                    initialUrl = loginUrl(service),
+                    onCancel = { finish() }
                 )
-            }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Open ChatGPT in your regular browser, then open ${CodexUrls.SESSION_API}. Copy the full session JSON and paste it below.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = "The app extracts accessToken from the session JSON and requests Codex usage with the required bearer token.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = { openExternalUrl(CodexUrls.CHATGPT_HOME) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Open ChatGPT")
-                    }
-                    OutlinedButton(
-                        onClick = { openExternalUrl(apiUrl(AiService.CODEX) ?: loginUrl(AiService.CODEX)) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Open Session")
-                    }
-                }
-
-                OutlinedTextField(
-                    value = manualInput,
-                    onValueChange = {
-                        manualInput = it
-                        statusText = if (it.isBlank()) "" else validateCodexManualInput(it)
-                    },
-                    label = { Text("Session Response JSON") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp),
-                    minLines = 5,
-                    maxLines = 12
-                )
-
-                if (statusText.isNotBlank()) {
-                    val isValid = statusText == CodexUsageResponseValidator.VALID_RESPONSE_MESSAGE
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isValid) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
-                    )
-                }
-
-                Button(
-                    onClick = {
-                        val error = saveManualResponse(AiService.CODEX, manualInput)
-                        if (error != null) {
-                            statusText = error
-                        }
-                    },
-                    enabled = manualInput.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Save & Finish")
-                }
             }
         }
     }
@@ -223,8 +118,7 @@ class LoginActivity : ComponentActivity() {
     ) {
         var isLoading by remember { mutableStateOf(false) }
         var statusText by remember { mutableStateOf("") }
-        var isOnLoginPage by remember { mutableStateOf(true) }
-        var showPasteForm by remember { mutableStateOf(false) }
+        var showPasteForm by remember { mutableStateOf(service == AiService.CODEX || service == AiService.CODEX_FEELOL) }
         var manualInput by remember { mutableStateOf("") }
 
         Scaffold(
@@ -243,7 +137,7 @@ class LoginActivity : ComponentActivity() {
                         }
                     },
                     actions = {
-                        if (service == AiService.CODEX || service == AiService.CHATGPT_PLUS) {
+                        if (apiUrl(service) != null || service == AiService.MIMO || service == AiService.DEEPSEEK) {
                             IconButton(onClick = { showPasteForm = !showPasteForm }) {
                                 Icon(Icons.Default.ContentCopy, contentDescription = "Paste response")
                             }
@@ -256,15 +150,6 @@ class LoginActivity : ComponentActivity() {
             }
         ) { paddingValues ->
             Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-                if (isOnLoginPage && (service == AiService.CODEX || service == AiService.CHATGPT_PLUS)) {
-                    Text(
-                        text = "⚠️ If the page shows a Google login error, use **Email** login instead, or paste the API response manually (tap the paste icon \uD83D\uDCCB above).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
-                    )
-                }
-
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     AndroidView(
                         factory = { ctx ->
@@ -275,48 +160,36 @@ class LoginActivity : ComponentActivity() {
                                 )
                                 settings.javaScriptEnabled = true
                                 settings.domStorageEnabled = true
-                                settings.userAgentString = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.113 Mobile Safari/537.36"
+                                settings.userAgentString =
+                                    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.113 Mobile Safari/537.36"
                                 CookieManager.getInstance().setAcceptCookie(true)
                                 CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
                                 webViewClient = object : WebViewClient() {
                                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                         isLoading = true
-                                        when {
-                                            url?.contains("auth/login") == true -> {
-                                                isOnLoginPage = true
-                                                statusText = "Please log in using Email (not Google)"
-                                            }
-                                            else -> {
-                                                statusText = "Loading..."
-                                            }
-                                        }
+                                        statusText = "Loading..."
                                     }
 
                                     override fun onPageFinished(view: WebView, url: String) {
                                         isLoading = false
-                                        val onLoginPage = url.contains("auth/login")
-                                        isOnLoginPage = onLoginPage
-
-                                        if (onLoginPage) return
-
                                         val apiTarget = apiUrl(service)
                                         when {
-                                            apiTarget?.let { url.startsWith(it) } == true -> {
+                                            apiTarget?.let { url.startsWith(it.substringBefore("?")) } == true -> {
                                                 statusText = "Extracting data..."
                                                 extractJsonFromPage(view, service) { message ->
                                                     statusText = message
                                                     showPasteForm = true
                                                 }
                                             }
-                                            service == AiService.MIMO || service == AiService.DEEPSEEK -> {
+                                            service == AiService.MIMO ||
+                                                service == AiService.DEEPSEEK ||
+                                                service == AiService.CODEX_FEELOL -> {
                                                 attemptExtractData(view, service)
                                             }
-                                            url.contains("chatgpt.com") && !url.contains("auth/") -> {
-                                                if (apiTarget != null) {
-                                                    statusText = "Navigating..."
-                                                    view.loadUrl(apiTarget)
-                                                }
+                                            url.contains("chatgpt.com") && !url.contains("auth/") && apiTarget != null -> {
+                                                statusText = "Opening API..."
+                                                view.loadUrl(apiTarget)
                                             }
                                         }
                                     }
@@ -333,74 +206,67 @@ class LoginActivity : ComponentActivity() {
                             modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp)
                         )
                     }
+                }
 
-                    if (statusText.isNotBlank() && !isLoading && !showPasteForm) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(12.dp)
-                        ) {
+                if (showPasteForm || statusText.isNotBlank()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (statusText.isNotBlank()) {
                             Text(
                                 text = statusText,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
-                    }
-                }
 
-                if (showPasteForm) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                            .padding(16.dp)
-                    ) {
                         Text(
-                            text = "Auto-fetch failed. Paste the API response manually:",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        Text(
-                            text = "Paste API Response",
+                            text = pasteTitle(service),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.size(8.dp))
-
-                        val instructions = when (service) {
-                            AiService.CODEX -> {
-                                "1. Open ${CodexUrls.CHATGPT_HOME} in your browser and confirm you are signed in\n" +
-                                "2. Open ${CodexUrls.SESSION_API}\n" +
-                                "3. Copy the entire JSON response and paste it below"
-                            }
-                            AiService.CHATGPT_PLUS -> {
-                                "1. Open ${CodexUrls.SESSION_API} in your browser (logged in)\n" +
-                                "2. Copy the entire JSON response\n" +
-                                "3. Paste it below"
-                            }
-                            else -> "Paste the response JSON below:"
-                        }
                         Text(
-                            text = instructions,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                            text = pasteInstructions(service),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            apiUrl(service)?.let { target ->
+                                OutlinedButton(
+                                    onClick = { openExternalUrl(target) },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Open API")
+                                }
+                            }
+                            Button(
+                                onClick = { openExternalUrl(loginUrl(service)) },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Cloud, contentDescription = null)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Open Login")
+                            }
+                        }
                         OutlinedTextField(
                             value = manualInput,
                             onValueChange = { manualInput = it },
-                            label = { Text("Response JSON") },
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                            minLines = 5,
-                            maxLines = 15
+                            label = { Text("Response / Token / Cookie") },
+                            modifier = Modifier.fillMaxWidth().height(140.dp),
+                            minLines = 4,
+                            maxLines = 10
                         )
-
                         Button(
                             onClick = {
                                 val error = saveManualResponse(service, manualInput)
-                                if (error != null) {
-                                    statusText = error
-                                }
+                                if (error != null) statusText = error
                             },
                             enabled = manualInput.isNotBlank(),
                             modifier = Modifier.fillMaxWidth()
@@ -413,36 +279,42 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    private fun pasteTitle(service: AiService): String {
+        return when (service) {
+            AiService.CODEX -> "Paste ChatGPT session JSON"
+            AiService.CHATGPT_PLUS -> "Paste ChatGPT session JSON"
+            AiService.CODEX_FEELOL -> "Paste feelol response or Bearer token"
+            AiService.DEEPSEEK -> "Paste DeepSeek cookie"
+            AiService.MIMO -> "Paste MiMo cookie"
+            else -> "Paste response"
+        }
+    }
+
+    private fun pasteInstructions(service: AiService): String {
+        return when (service) {
+            AiService.CODEX -> "Open ${CodexUrls.SESSION_API} while signed in to chatgpt.com, copy the full JSON response, then paste it here."
+            AiService.CHATGPT_PLUS -> "Open ${CodexUrls.SESSION_API} while signed in to chatgpt.com, copy the full JSON response, then paste it here."
+            AiService.CODEX_FEELOL -> "Open https://feea.lol/api/v1/subscriptions?timezone=Asia%2FShanghai while signed in, copy JSON; or paste Authorization: Bearer token."
+            AiService.DEEPSEEK -> "Paste the cookie captured from platform.deepseek.com after login."
+            AiService.MIMO -> "Paste the cookie captured from platform.xiaomimimo.com after login."
+            else -> "Paste the response below."
+        }
+    }
+
     private fun saveManualResponse(service: AiService, response: String): String? {
         return try {
             when (service) {
-                AiService.CODEX -> {
-                    saveCodexManualResponse(response)?.let { return it }
-                }
-                AiService.CHATGPT_PLUS -> {
-                    val sessionJson = json.decodeFromString<JsonSessionResponse>(response)
-                    val credential = Credential.ChatGPTPlusCredential(
-                        accessToken = sessionJson.accessToken ?: "",
-                        planName = sessionJson.plan?.title ?: sessionJson.plan?.id ?: "Plus",
-                        renewalDate = sessionJson.plan?.renewalDate ?: "",
-                        billingPeriod = when (sessionJson.plan?.interval?.lowercase()) {
-                            "year" -> "Yearly"
-                            else -> "Monthly"
-                        },
-                        manualSessionResponse = response
-                    )
-                    prefsManager.saveCredential(AiService.CHATGPT_PLUS, credential)
-                }
+                AiService.CODEX -> saveCodexResponse(response)?.let { return it }
+                AiService.CHATGPT_PLUS -> saveChatGptPlusResponse(response)
+                AiService.CODEX_FEELOL -> saveFeelolResponse(response)
                 AiService.MIMO -> {
-                    val credential = Credential.MiMoCredential(directCookie = response)
-                    prefsManager.saveCredential(AiService.MIMO, credential)
+                    prefsManager.saveCredential(AiService.MIMO, Credential.MiMoCredential(directCookie = response))
                 }
                 AiService.DEEPSEEK -> {
-                    val credential = Credential.DeepSeekCredential(
-                        accessToken = "",
-                        sessionCookie = response
+                    prefsManager.saveCredential(
+                        AiService.DEEPSEEK,
+                        Credential.DeepSeekCredential(accessToken = "", sessionCookie = response)
                     )
-                    prefsManager.saveCredential(AiService.DEEPSEEK, credential)
                 }
                 else -> return null
             }
@@ -450,7 +322,7 @@ class LoginActivity : ComponentActivity() {
             finish()
             null
         } catch (e: Exception) {
-            "Invalid JSON: ${e.message}"
+            "Invalid response: ${e.message}"
         }
     }
 
@@ -461,94 +333,67 @@ class LoginActivity : ComponentActivity() {
     ) {
         view.evaluateJavascript("document.body ? document.body.innerText.trim() : ''") { result ->
             val rawText = decodeJavascriptString(result) ?: return@evaluateJavascript
-            if (rawText.length < 10) {
-                onInvalidResponse("No usable response was found. Open the API URL in a logged-in browser and paste the JSON response.")
-                return@evaluateJavascript
-            }
-
-            when (service) {
-                AiService.CHATGPT_PLUS -> {
-                    try {
-                        val sessionJson = json.decodeFromString<JsonSessionResponse>(rawText)
-                        if (sessionJson.accessToken.isNullOrBlank() && sessionJson.plan == null) {
-                            onInvalidResponse("The session endpoint did not return account data. Log in to chatgpt.com first, then try again or paste the response manually.")
-                            return@evaluateJavascript
-                        }
-                        val credential = Credential.ChatGPTPlusCredential(
-                            accessToken = sessionJson.accessToken ?: "",
-                            planName = sessionJson.plan?.title ?: sessionJson.plan?.id ?: "Plus",
-                            renewalDate = sessionJson.plan?.renewalDate ?: "",
-                            billingPeriod = when (sessionJson.plan?.interval?.lowercase()) {
-                                "year" -> "Yearly"
-                                else -> "Monthly"
-                            },
-                            manualSessionResponse = rawText
-                        )
-                        prefsManager.saveCredential(AiService.CHATGPT_PLUS, credential)
-                        setResult(Activity.RESULT_OK)
-                        finish()
-                    } catch (_: Exception) {
-                        onInvalidResponse("Could not read the ChatGPT session response. Paste the JSON response manually.")
-                    }
-                }
-                AiService.CODEX -> {
-                    saveCodexResponse(rawText)?.let { message ->
-                        onInvalidResponse(message)
-                        return@evaluateJavascript
-                    }
-                    setResult(Activity.RESULT_OK)
-                    finish()
-                }
-                else -> {}
+            val error = saveManualResponse(service, rawText)
+            if (error != null) {
+                onInvalidResponse(error)
             }
         }
     }
 
-    private fun saveCodexManualResponse(response: String): String? = saveCodexResponse(response)
+    private fun saveChatGptPlusResponse(response: String) {
+        val sessionJson = json.decodeFromString<JsonSessionResponse>(response)
+        val credential = Credential.ChatGPTPlusCredential(
+            accessToken = sessionJson.accessToken ?: "",
+            planName = sessionJson.plan?.title ?: sessionJson.plan?.id ?: "Plus",
+            renewalDate = sessionJson.plan?.renewalDate ?: "",
+            billingPeriod = when (sessionJson.plan?.interval?.lowercase()) {
+                "year" -> "Yearly"
+                else -> "Monthly"
+            },
+            manualSessionResponse = response
+        )
+        prefsManager.saveCredential(AiService.CHATGPT_PLUS, credential)
+    }
 
     private fun saveCodexResponse(response: String): String? {
         parseCodexSessionAccessToken(response)?.let { accessToken ->
-            val credential = Credential.CodexCredential(
-                accessToken = accessToken,
-                refreshToken = ""
+            prefsManager.saveCredential(
+                AiService.CODEX,
+                Credential.CodexCredential(accessToken = accessToken, refreshToken = "")
             )
-            prefsManager.saveCredential(AiService.CODEX, credential)
             return null
         }
 
         val usageResponse = CodexUsageResponseValidator.parse(response)
         if (usageResponse == null || !CodexUsageResponseValidator.hasUsageData(usageResponse)) {
-            return invalidCodexResponseMessage(response)
+            return if (response.contains("unauthorized", ignoreCase = true)) {
+                "ChatGPT returned Unauthorized. Paste ${CodexUrls.SESSION_API} session JSON instead."
+            } else {
+                "Paste a valid ChatGPT session JSON or saved Codex usage JSON response."
+            }
         }
 
-        val credential = Credential.CodexCredential(
-            accessToken = "",
-            refreshToken = "",
-            manualResponse = response
+        prefsManager.saveCredential(
+            AiService.CODEX,
+            Credential.CodexCredential(accessToken = "", refreshToken = "", manualResponse = response)
         )
-        prefsManager.saveCredential(AiService.CODEX, credential)
         return null
     }
 
-    private fun invalidCodexResponseMessage(response: String): String {
-        return if (CodexUsageResponseValidator.validationMessage(response).startsWith("Unauthorized")) {
-            "ChatGPT returned Unauthorized. Open ${CodexUrls.SESSION_API} while signed in, then paste the session JSON."
+    private fun saveFeelolResponse(response: String) {
+        val token = extractBearerToken(response)
+        val credential = if (token != null) {
+            Credential.CodexFeelolCredential(accessToken = token)
         } else {
-            "Paste a valid ChatGPT session JSON with accessToken, or a saved Codex usage JSON response."
+            Credential.CodexFeelolCredential(manualResponse = response)
         }
+        prefsManager.saveCredential(AiService.CODEX_FEELOL, credential)
     }
 
     private fun parseCodexSessionAccessToken(response: String): String? {
         return runCatching {
             json.decodeFromString<JsonSessionResponse>(response).accessToken?.takeIf { it.isNotBlank() }
         }.getOrNull()
-    }
-
-    private fun validateCodexManualInput(response: String): String {
-        if (parseCodexSessionAccessToken(response) != null) {
-            return CodexUsageResponseValidator.VALID_RESPONSE_MESSAGE
-        }
-        return CodexUsageResponseValidator.validationMessage(response)
     }
 
     private fun decodeJavascriptString(result: String?): String? {
@@ -561,43 +406,73 @@ class LoginActivity : ComponentActivity() {
 
     private fun attemptExtractData(view: WebView, service: AiService) {
         when (service) {
-            AiService.MIMO -> extractMiMoData(view)
+            AiService.MIMO -> extractMiMoData()
             AiService.DEEPSEEK -> extractDeepSeekData()
-            else -> {}
+            AiService.CODEX_FEELOL -> extractFeelolData(view)
+            else -> Unit
         }
     }
 
-    private fun extractMiMoData(view: WebView) {
+    private fun extractMiMoData() {
         val cookies = CookieManager.getInstance().getCookie("https://platform.xiaomimimo.com") ?: ""
         if (cookies.isNotBlank()) {
-            val credential = Credential.MiMoCredential(directCookie = cookies)
-            prefsManager.saveCredential(AiService.MIMO, credential)
+            prefsManager.saveCredential(AiService.MIMO, Credential.MiMoCredential(directCookie = cookies))
             setResult(Activity.RESULT_OK)
             finish()
         }
     }
 
     private fun extractDeepSeekData() {
-        val cookies = CookieManager.getInstance().getCookie("https://platform.deepseek.com") ?: ""
-        if (cookies.isNotBlank() && hasLikelyAuthCookie(cookies)) {
-            val credential = Credential.DeepSeekCredential(
-                accessToken = "",
-                sessionCookie = cookies
+        CookieManager.getInstance().flush()
+        val cookies = listOf(
+            CookieManager.getInstance().getCookie("https://platform.deepseek.com") ?: "",
+            CookieManager.getInstance().getCookie("https://api.deepseek.com") ?: ""
+        ).filter { it.isNotBlank() }.distinct().joinToString("; ")
+        if (cookies.isNotBlank()) {
+            prefsManager.saveCredential(
+                AiService.DEEPSEEK,
+                Credential.DeepSeekCredential(accessToken = "", sessionCookie = cookies)
             )
-            prefsManager.saveCredential(AiService.DEEPSEEK, credential)
             setResult(Activity.RESULT_OK)
             finish()
         }
     }
 
-    private fun hasLikelyAuthCookie(cookies: String): Boolean {
-        return cookies.split(";")
-            .map { it.trim().lowercase() }
-            .any { cookie ->
-                cookie.contains("token") ||
-                    cookie.contains("session") ||
-                    cookie.contains("auth")
+    private fun extractFeelolData(view: WebView) {
+        val script = """
+            (function() {
+              const parts = [];
+              for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                parts.push(k + '=' + localStorage.getItem(k));
+              }
+              for (let i = 0; i < sessionStorage.length; i++) {
+                const k = sessionStorage.key(i);
+                parts.push(k + '=' + sessionStorage.getItem(k));
+              }
+              if (document.body) parts.push(document.body.innerText || '');
+              return parts.join('\n');
+            })();
+        """.trimIndent()
+        view.evaluateJavascript(script) { result ->
+            val text = decodeJavascriptString(result).orEmpty()
+            val token = extractBearerToken(text)
+            if (token != null) {
+                prefsManager.saveCredential(
+                    AiService.CODEX_FEELOL,
+                    Credential.CodexFeelolCredential(accessToken = token)
+                )
+                setResult(Activity.RESULT_OK)
+                finish()
             }
+        }
+    }
+
+    private fun extractBearerToken(text: String): String? {
+        val bearer = Regex("Bearer\\s+([A-Za-z0-9._~+/-]+=*)").find(text)?.groupValues?.getOrNull(1)
+        if (!bearer.isNullOrBlank()) return bearer
+        val jwt = Regex("eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+").find(text)?.value
+        return jwt?.takeIf { it.isNotBlank() }
     }
 
     private fun openExternalUrl(url: String) {

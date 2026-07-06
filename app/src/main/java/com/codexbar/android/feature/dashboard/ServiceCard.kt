@@ -53,6 +53,7 @@ fun ServiceCard(
 ) {
     var showActions by remember { mutableStateOf(false) }
     val palette = dashboardThemePalette(themeStyle)
+    val iconSize = if (palette.compact) 28.dp else 32.dp
 
     Card(
         modifier = modifier
@@ -61,14 +62,14 @@ fun ServiceCard(
                 onClick = onClick,
                 onLongClick = { showActions = true }
             ),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(palette.cardRadius),
         elevation = CardDefaults.cardElevation(defaultElevation = palette.cardElevation),
         colors = CardDefaults.cardColors(
             containerColor = palette.cardContainerColor
         )
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(palette.cardPadding)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -76,9 +77,9 @@ fun ServiceCard(
             ) {
                 ServiceBrandIcon(
                     service = cardData.service,
-                    size = 32.dp
+                    size = iconSize
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(palette.contentSpacing))
                 Text(
                     text = cardData.service.displayName,
                     style = MaterialTheme.typography.titleMedium,
@@ -89,7 +90,7 @@ fun ServiceCard(
                 cardData.tier?.let { tier ->
                     Spacer(modifier = Modifier.width(8.dp))
                     Surface(
-                        shape = RoundedCornerShape(4.dp),
+                        shape = RoundedCornerShape(palette.chipRadius),
                         color = palette.secondaryTextColor.copy(alpha = 0.14f)
                     ) {
                         Text(
@@ -105,7 +106,7 @@ fun ServiceCard(
             }
 
             if (cardData.error != null) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(palette.contentSpacing))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.Error,
@@ -123,7 +124,7 @@ fun ServiceCard(
                 return@Column
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(palette.contentSpacing))
 
             val primaryWindow = cardData.windows.firstOrNull()
             primaryWindow?.let { window ->
@@ -142,9 +143,9 @@ fun ServiceCard(
             val secondaryWindows = cardData.windows.drop(1)
 
             if (secondaryWindows.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(palette.windowSpacing))
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(if (palette.compact) 3.dp else 4.dp)
                 ) {
                     secondaryWindows.forEach { window ->
                         QuotaGaugeBar(
@@ -162,7 +163,7 @@ fun ServiceCard(
             }
 
             cardData.extraUsage?.let { extra ->
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(palette.windowSpacing))
                 val hasInitial = extra.monthlyLimit > 0
                 Text(
                     text = if (hasInitial) {
@@ -175,7 +176,7 @@ fun ServiceCard(
                     color = palette.secondaryTextColor
                 )
                 if (hasInitial) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(if (palette.compact) 3.dp else 4.dp))
                     QuotaGaugeBar(
                         utilization = extra.utilization,
                         label = "Balance",
@@ -185,7 +186,7 @@ fun ServiceCard(
             }
 
             cardData.lastUpdated?.let { time ->
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(palette.windowSpacing))
                 Text(
                     text = "Updated: ${formatInstant(time)}",
                     style = MaterialTheme.typography.labelSmall,
@@ -224,7 +225,7 @@ private fun StatusChip(status: ProviderStatus, palette: DashboardThemePalette) {
         ProviderStatus.UNKNOWN -> Pair(palette.unknownColor, "Unknown")
     }
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(palette.chipRadius),
         color = color.copy(alpha = 0.15f)
     ) {
         Text(

@@ -3,7 +3,6 @@ package com.codexbar.android.core.data
 import com.codexbar.android.core.domain.model.AiService
 import com.codexbar.android.core.domain.model.AppError
 import com.codexbar.android.core.domain.model.Credential
-import com.codexbar.android.core.domain.model.ExtraUsage
 import com.codexbar.android.core.domain.model.ProviderKind
 import com.codexbar.android.core.domain.model.ProviderQuota
 import com.codexbar.android.core.domain.model.ProviderStatus
@@ -37,25 +36,38 @@ class ChatGPTPlusRepositoryImpl @Inject constructor(
         val credential = prefsManager.loadCredential(AiService.CHATGPT_PLUS)
             as? Credential.ChatGPTPlusCredential
 
-        val planName = credential?.planName?.ifBlank { "Plus" } ?: "Plus"
+        var planName = credential?.planName?.ifBlank { "Plus" } ?: "Plus"
         var renewalStr = credential?.renewalDate ?: ""
         var billingPeriod = credential?.billingPeriod?.ifBlank { "Monthly" } ?: "Monthly"
+        var hasValidSession = false
 
-        if (renewalStr.isBlank() && credential?.manualSessionResponse != null) {
+        if (!credential?.manualSessionResponse.isNullOrBlank()) {
             try {
-                val session = json.decodeFromString<ChatGPTPlusRepositoryImpl.SessionResponse>(credential.manualSessionResponse)
+                val session = json.decodeFromString<SessionResponse>(credential!!.manualSessionResponse!!)
+                hasValidSession = !session.accessToken.isNullOrBlank() || session.plan != null
+                planName = session.plan?.title ?: session.plan?.id ?: planName
                 if (renewalStr.isBlank()) renewalStr = session.plan?.renewalDate ?: ""
-                if (billingPeriod.isBlank()) {
-                    billingPeriod = when (session.plan?.interval?.lowercase()) {
-                        "year" -> "Yearly"
-                        else -> "Monthly"
-                    }
+                billingPeriod = when (session.plan?.interval?.lowercase()) {
+                    "year" -> "Yearly"
+                    "month" -> "Monthly"
+                    else -> billingPeriod
                 }
             } catch (_: Exception) {}
         }
 
         if (renewalStr.isBlank()) {
-            return Result.Failure(AppError.CredentialNotFound(AiService.CHATGPT_PLUS))
+            if (!hasValidSession) {
+                return Result.Failure(AppError.CredentialNotFound(AiService.CHATGPT_PLUS))
+            }
+            return Result.Success(
+                QuotaInfo(
+                    service = AiService.CHATGPT_PLUS,
+                    windows = emptyList(),
+                    extraUsage = null,
+                    tier = planName,
+                    fetchedAt = Instant.now()
+                )
+            )
         }
 
         return try {
@@ -98,11 +110,14 @@ class ChatGPTPlusRepositoryImpl @Inject constructor(
 
     @Serializable
     private data class SessionResponse(
+        val accessToken: String? = null,
         val plan: SessionPlan? = null
     )
 
     @Serializable
     private data class SessionPlan(
+        val id: String? = null,
+        val title: String? = null,
         val renewalDate: String? = null,
         val interval: String? = null
     )
@@ -118,10 +133,9 @@ class ChatGPTPlusRepositoryImpl @Inject constructor(
         return when (val result = fetchQuota()) {
             is Result.Success -> {
                 val info = result.value
-                val remainingDays = info.windows.firstOrNull()?.remainingDays ?: 0
-                val periodDays = info.windows.firstOrNull()?.periodDays ?: 30
-
+                val remainingDays = info.windows.firstOrNull()?.remainingDays
                 val status = when {
+                    remainingDays == null -> ProviderStatus.OK
                     remainingDays <= 0 -> ProviderStatus.ERROR
                     remainingDays <= 7 -> ProviderStatus.WARNING
                     else -> ProviderStatus.OK
@@ -134,7 +148,7 @@ class ChatGPTPlusRepositoryImpl @Inject constructor(
                     metrics = listOf(
                         QuotaMetric(
                             label = "Remaining",
-                            value = if (remainingDays > 0) "${remainingDays} days" else "Expired"
+                            value = remainingDays?.let { if (it > 0) "$it days" else "Expired" } ?: "Session OK"
                         )
                     ),
                     lastUpdatedAt = formatInstant(info.fetchedAt)
