@@ -11,6 +11,7 @@ import com.codexbar.android.core.network.codexfeelol.CodexFeelolApiService
 import com.codexbar.android.core.network.codexfeelol.CodexFeelolDto
 import com.codexbar.android.core.security.EncryptedPrefsManager
 import java.io.IOException
+import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -86,21 +87,18 @@ class CodexFeelolRepositoryImpl @Inject constructor(
             ?: error("No feelol subscription data")
         val group = subscription.group ?: error("Missing feelol subscription group")
 
-        val windows = listOf(
-            buildWindow("Daily", subscription.dailyUsageUsd, group.dailyLimitUsd, subscription.dailyWindowStart, WindowKind.DAILY),
-            buildWindow("Weekly", subscription.weeklyUsageUsd, group.weeklyLimitUsd, subscription.weeklyWindowStart, WindowKind.WEEKLY),
-            buildWindow("Monthly", subscription.monthlyUsageUsd, group.monthlyLimitUsd, subscription.monthlyWindowStart, WindowKind.MONTHLY)
-        )
-        val expiresLabel = subscription.expiresAt?.let { parseOffset(it)?.toLocalDate()?.toString() }
-        val tier = listOfNotNull(group.name, expiresLabel?.let { "expires $it" })
-            .joinToString(" · ")
-            .ifBlank { "feelol" }
+        val windows = buildList {
+            add(buildWindow("Daily", subscription.dailyUsageUsd, group.dailyLimitUsd, subscription.dailyWindowStart, WindowKind.DAILY))
+            add(buildWindow("Weekly", subscription.weeklyUsageUsd, group.weeklyLimitUsd, subscription.weeklyWindowStart, WindowKind.WEEKLY))
+            add(buildWindow("Monthly", subscription.monthlyUsageUsd, group.monthlyLimitUsd, subscription.monthlyWindowStart, WindowKind.MONTHLY))
+            buildExpiryWindow(subscription.startsAt, subscription.expiresAt)?.let { add(it) }
+        }
 
         return QuotaInfo(
             service = AiService.CODEX_FEELOL,
             windows = windows,
             extraUsage = null,
-            tier = tier,
+            tier = group.name.ifBlank { "feelol" },
             fetchedAt = Instant.now()
         )
     }
@@ -121,6 +119,24 @@ class CodexFeelolRepositoryImpl @Inject constructor(
             }.toInstant()
         }
         return UsageWindow(label = label, utilization = utilization, resetsAt = reset)
+    }
+
+    private fun buildExpiryWindow(startsAt: String?, expiresAt: String?): UsageWindow? {
+        val start = parseOffset(startsAt)?.toInstant() ?: return null
+        val expires = parseOffset(expiresAt)?.toInstant() ?: return null
+        val now = Instant.now()
+        val totalDays = Duration.between(start, expires).toDays().coerceAtLeast(1).toInt()
+        val remainingDays = Duration.between(now, expires).toDays().coerceAtLeast(0).toInt()
+        val elapsedMillis = Duration.between(start, now).toMillis().coerceAtLeast(0)
+        val totalMillis = Duration.between(start, expires).toMillis().coerceAtLeast(1)
+        val utilization = (elapsedMillis.toDouble() / totalMillis.toDouble()).coerceIn(0.0, 1.0)
+        return UsageWindow(
+            label = "Expires",
+            utilization = utilization,
+            resetsAt = null,
+            remainingDays = remainingDays,
+            periodDays = totalDays
+        )
     }
 
     private fun parseOffset(value: String?): OffsetDateTime? {
