@@ -70,8 +70,8 @@ class EncryptedPrefsManager @Inject constructor(
                 editor.putString("${prefix}_oauth_client_secret", credential.oauthClientSecret)
             }
             is Credential.DeepSeekCredential -> {
-                editor.putString("${prefix}_base_url", credential.baseUrl)
-                editor.putString("${prefix}_session_cookie", credential.sessionCookie)
+                editor.putString("${prefix}_base_url", credential.baseUrl.ifBlank { "https://api.deepseek.com" })
+                editor.remove("${prefix}_session_cookie")
                 if (credential.initialTotal > 0) editor.putString("${prefix}_initial_total", credential.initialTotal.toString())
                 else editor.remove("${prefix}_initial_total")
             }
@@ -137,9 +137,8 @@ class EncryptedPrefsManager @Inject constructor(
                 val baseUrl = prefs.getString("${prefix}_base_url", "https://api.deepseek.com") ?: "https://api.deepseek.com"
                 val initialTotalStr = prefs.getString("${prefix}_initial_total", null)
                 val initialTotal = initialTotalStr?.toDoubleOrNull() ?: 0.0
-                val sessionCookie = prefs.getString("${prefix}_session_cookie", "") ?: ""
-                if (accessToken.isBlank() && sessionCookie.isBlank()) return null
-                Credential.DeepSeekCredential(accessToken = accessToken, baseUrl = baseUrl, initialTotal = initialTotal, sessionCookie = sessionCookie)
+                if (accessToken.isBlank()) return null
+                Credential.DeepSeekCredential(accessToken = accessToken, baseUrl = baseUrl, initialTotal = initialTotal, sessionCookie = "")
             }
             AiService.CHATGPT_PLUS -> {
                 val planName = prefs.getString("${prefix}_plan_name", "Plus") ?: "Plus"
@@ -196,10 +195,7 @@ class EncryptedPrefsManager @Inject constructor(
                 !prefs.getString("${prefix}_backend_url", "").isNullOrBlank() ||
                     !prefs.getString("${prefix}_direct_cookie", "").isNullOrBlank()
             }
-            AiService.DEEPSEEK -> {
-                !prefs.getString("${prefix}_access_token", "").isNullOrBlank() ||
-                    !prefs.getString("${prefix}_session_cookie", "").isNullOrBlank()
-            }
+            AiService.DEEPSEEK -> !prefs.getString("${prefix}_access_token", "").isNullOrBlank()
             else -> !prefs.getString("${prefix}_access_token", "").isNullOrBlank()
         }
     }
@@ -258,18 +254,5 @@ class EncryptedPrefsManager @Inject constructor(
             if (resetsAt != null) editor.putLong(key, resetsAt.epochSecond) else editor.remove(key)
         }
         editor.apply()
-    }
-
-    fun loadResetTimes(service: AiService): Map<String, Instant> {
-        val prefix = "${service.name}_"
-        val suffix = "_resets_at"
-        return prefs.all
-            .filter { it.key.startsWith(prefix) && it.key.endsWith(suffix) }
-            .mapNotNull { (key, value) ->
-                val label = key.removePrefix(prefix).removeSuffix(suffix)
-                val epochSecond = (value as? Long)?.takeIf { it > 0 } ?: return@mapNotNull null
-                label to Instant.ofEpochSecond(epochSecond)
-            }
-            .toMap()
     }
 }
