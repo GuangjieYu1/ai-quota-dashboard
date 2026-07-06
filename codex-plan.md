@@ -33,7 +33,14 @@ Use the official API-key flow instead:
 - Ignore and clear old `sessionCookie` values.
 - A cookie-only DeepSeek credential must not count as configured.
 
-DeepSeek official docs describe using `https://api.deepseek.com` as the OpenAI-compatible base URL and `Authorization: Bearer ${DEEPSEEK_API_KEY}` for API calls.
+DeepSeek official docs describe using `https://api.deepseek.com` as the OpenAI-compatible base URL and `Authorization: Bearer ${DEEPSEEK_API_KEY}` for API calls. The official balance endpoint only returns availability plus `total_balance`, `granted_balance`, and `topped_up_balance`; it does not expose monthly cost, historical spend, or web-account summary fields.
+
+Supported DeepSeek amount strategy:
+
+1. Official mode: show current balance from `/user/balance`, including total / granted / topped-up balances.
+2. Derived mode: if the user manually enters `initialTotal`, compute `used = initialTotal - total_balance`.
+3. Local-log mode: if the app later records DeepSeek API calls locally, estimate daily / weekly / monthly spend from local logs and published model pricing.
+4. Do not depend on `platform.deepseek.com/api/v0/users/get_user_summary` in the APK. It is a private web endpoint and has already rejected Android app requests.
 
 ## Important Correction: Theme Means UI Preset, Not Palette
 
@@ -49,16 +56,19 @@ The intended feature is a set of complete dashboard UI presets. The user specifi
    - Quota bars look like stacked brick segments.
    - Friendly, playful, very readable on phone.
 
-2. `ANIME_HUD`
-   - 二次元风格 dashboard.
-   - Soft gradient or illustrated background layer.
-   - Rounded translucent cards, sparkle/energy accents.
-   - Provider tabs can look like character badges or skill cards.
-   - Quota windows can be rendered as status bars / energy bars.
-   - Must remain non-copyrighted and generic; do not copy any specific anime IP.
+2. `CYBERPUNK_GRID`
+   - Replace the previous anime/HUD idea.
+   - Inspired by the provided black-orange grid reference image.
+   - Dark engineering/cyberpunk screen, black background with amber/orange grid lines.
+   - Large circular donut gauges for remaining quota.
+   - Relay / distribution / circuit labels as decorative information architecture.
+   - Segmented tabs such as S1 / S2 / S3 at the top.
+   - Dashed data-flow lines connecting left-side nodes to right-side gauges.
+   - Use amber, orange, cyan, and muted gray accents.
+   - Avoid copying any specific copyrighted UI; use the reference as style direction only.
 
 3. `MONITOR_PANEL`
-   - The style represented by the reference screenshots.
+   - The style represented by the earlier ClaudeBar / Glass Lab / Detail Ledger reference screenshots.
    - Includes dark terminal grid, glass lab, and detailed ledger variants.
    - This should feel like a usage monitor / aircraft cockpit / ClaudeBar-style control panel, not normal Material cards.
 
@@ -74,7 +84,7 @@ Introduce a separate concept:
 enum class DashboardLayoutPreset {
     MOBILE_NATIVE,
     LEGO_BRICK,
-    ANIME_HUD,
+    CYBERPUNK_GRID,
     MONITOR_PANEL
 }
 ```
@@ -85,7 +95,7 @@ Route dashboard rendering by preset:
 when (layoutPreset) {
     MOBILE_NATIVE -> MobileNativeDashboard(...)
     LEGO_BRICK -> LegoBrickDashboard(...)
-    ANIME_HUD -> AnimeHudDashboard(...)
+    CYBERPUNK_GRID -> CyberpunkGridDashboard(...)
     MONITOR_PANEL -> MonitorPanelDashboard(...)
 }
 ```
@@ -127,7 +137,7 @@ when (layoutPreset) {
 - Add `DashboardLayoutPreset` enum.
 - Store selected preset in `EncryptedPrefsManager` or existing settings storage.
 - Settings screen should show preset preview cards, not just color dots.
-- Preset choices shown to user: `Mobile Native`, `Lego Brick`, `Anime HUD`, `Monitor Panel`.
+- Preset choices shown to user: `Mobile Native`, `Lego Brick`, `Cyberpunk Grid`, `Monitor Panel`.
 
 ### Phase UI-2: Extract current screen
 
@@ -142,12 +152,13 @@ when (layoutPreset) {
 - Provider icon/avatar should sit in circular or square plastic-brick badge.
 - Avoid brand/IP copying; keep it inspired by construction toys, not literal LEGO logos.
 
-### Phase UI-4: Add Anime HUD
+### Phase UI-4: Add Cyberpunk Grid
 
-- Add `AnimeHudDashboard.kt`.
-- Use generic anime-inspired HUD styling: translucent panels, energy bars, small sparkle accents.
-- Avoid copyrighted characters or specific franchise design language.
-- Keep accessibility: contrast and text size must remain readable.
+- Add `CyberpunkGridDashboard.kt`.
+- Use a dark grid background, amber/orange circuit lines, relay labels, S1/S2/S3 tabs, and large donut gauges.
+- Render each quota window as a circular gauge card, with left-side node labels and dashed connector lines.
+- Phone layout should stack gauges vertically like the reference image.
+- Tablet/wide layout can split into a left data-flow column and right gauge column.
 
 ### Phase UI-5: Add Monitor Panel
 
