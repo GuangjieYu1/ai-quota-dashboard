@@ -98,7 +98,7 @@ class CodexFeelolRepositoryImpl @Inject constructor(
             service = AiService.CODEX_FEELOL,
             windows = windows,
             extraUsage = null,
-            tier = group.name.ifBlank { "feelol" },
+            tier = group.name?.takeIf { it.isNotBlank() } ?: "feelol",
             fetchedAt = Instant.now()
         )
     }
