@@ -21,6 +21,7 @@ https://github.com/GuangjieYu1/ai-quota-dashboard/compare/main...codex/fix-quota
 3. Parse feelol daily, weekly, and monthly usage/limit values, expiry, and reset windows.
 4. DeepSeek should use the official API-key balance path only. Do not rely on `platform.deepseek.com` browser cookies for quota because that private web endpoint rejects the request in the Android app.
 5. Move feelol `expires_at` from the top tier chip into an `Expires` progress bar under `Monthly`.
+6. Add a planned `Qoder` provider. Qoder is credit-metered, but the stable public docs currently describe viewing usage in the IDE or website rather than a public balance API, so implementation should start with manual JSON / WebView capture and then become a first-class API integration if a stable endpoint is found.
 
 ## DeepSeek Decision
 
@@ -41,6 +42,53 @@ Supported DeepSeek amount strategy:
 2. Derived mode: if the user manually enters `initialTotal`, compute `used = initialTotal - total_balance`.
 3. Local-log mode: if the app later records DeepSeek API calls locally, estimate daily / weekly / monthly spend from local logs and published model pricing.
 4. Do not depend on `platform.deepseek.com/api/v0/users/get_user_summary` in the APK. It is a private web endpoint and has already rejected Android app requests.
+
+## Qoder Provider Plan
+
+Qoder should be treated as a planned provider, not as an already supported provider until the endpoint is verified.
+
+Facts from current Qoder docs:
+
+- Qoder is an agentic coding platform with Desktop, CLI, JetBrains Plugin, Cloud Agents, QoderWork, and QoderWake.
+- Qoder uses a credits-based quota system for premium large language model usage.
+- Credit-consuming surfaces include Editor Inline Chat / Ask Mode / Agent Mode, Quest Agent Mode / Experts Mode, and Knowledge Engine operations such as Repo Wiki and Knowledge Card.
+- Qoder documents that usage can be viewed in the IDE and on the website under avatar → Settings → Usage.
+- Qoder docs mention Plan Credits, Add-on Credits, usage priority, and expiration, but the public docs do not currently describe a stable public balance API.
+
+Implementation strategy:
+
+1. Add `AiService.QODER`.
+2. Add `Credential.QoderCredential` with these fields:
+   - `accessToken: String`
+   - `manualResponse: String?`
+   - `baseUrl: String = "https://qoder.com"`
+3. Add `QoderDto` models only after capturing the actual Settings → Usage response shape.
+4. Add `QoderRepositoryImpl` with two modes:
+   - Manual mode: parse pasted usage JSON from the Qoder Settings → Usage network response.
+   - Token mode: call the verified Qoder usage endpoint with the captured bearer token / cookie only after the endpoint is confirmed.
+5. Add Settings UI:
+   - `Login with Qoder`
+   - `Usage Response JSON`
+   - `Access Token / Cookie` advanced field
+6. Add LoginActivity support:
+   - Login URL: `https://qoder.com/sign-in` or the actual sign-in URL found in the site flow.
+   - Usage page URL: `https://qoder.com` account Settings → Usage, or the actual usage page path after manual inspection.
+   - Try to extract bearer token from localStorage/sessionStorage/cookies, but do not save incomplete values.
+7. Dashboard mapping should show:
+   - Plan Credits: used / total / remaining, reset at billing period end if available.
+   - Add-on Credits: available credits and expiration if available.
+   - Basic daily allowance: show only if the response exposes it.
+   - Credits Log: optional secondary detail; do not make it required for MVP.
+
+Validation requirement:
+
+Before implementing the API call path, capture the real Qoder network response from browser DevTools:
+
+```text
+Open qoder.com → sign in → avatar → Settings → Usage → DevTools Network → find JSON response containing plan credits / add-on credits / expiration → copy request URL, method, request headers, and redacted response body.
+```
+
+Do not infer endpoint names. Do not hard-code guessed private endpoints without a captured response.
 
 ## Important Correction: Theme Means UI Preset, Not Palette
 
@@ -182,6 +230,7 @@ when (layoutPreset) {
 - old DeepSeek platform cookie no longer counts as a valid credential
 - feelol expiry moved into an `Expires` usage window
 - preliminary theme tokens, but this is not the final theme architecture
+- Qoder support is documented as a planned provider, pending endpoint capture
 
 ## Local Verification Command
 
