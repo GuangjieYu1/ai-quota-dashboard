@@ -19,11 +19,6 @@ import java.io.IOException
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import javax.inject.Inject
 
 class DeepSeekRepositoryImpl @Inject constructor(
@@ -40,43 +35,7 @@ class DeepSeekRepositoryImpl @Inject constructor(
             as? Credential.DeepSeekCredential
             ?: return Result.Failure(AppError.CredentialNotFound(AiService.DEEPSEEK))
 
-        return if (credential.sessionCookie.isNotBlank()) {
-            fetchQuotaFromUserSummary(credential)
-        } else {
-            fetchQuotaFromApiBalance(credential)
-        }
-    }
-
-    private suspend fun fetchQuotaFromUserSummary(
-        credential: Credential.DeepSeekCredential
-    ): Result<QuotaInfo, AppError> {
-        val cookie = normalizeCookie(credential.sessionCookie)
-        validateCookieHeader(cookie)?.let { message ->
-            return Result.Failure(AppError.ParseError(message))
-        }
-
-        return try {
-            val response = apiService.getUserSummary(cookie = cookie)
-            when (response.code()) {
-                200 -> {
-                    val body = response.body()
-                        ?: return Result.Failure(AppError.ParseError("Empty response body"))
-                    if (body.code != null && body.code != 0) {
-                        val message = body.message ?: "DeepSeek summary rejected the request"
-                        return Result.Failure(AppError.ParseError(message))
-                    }
-                    Result.Success(mapUserSummaryToQuotaInfo(body))
-                }
-                401, 403 -> Result.Failure(AppError.AuthError(AiService.DEEPSEEK, isTerminal = true, message = "DeepSeek login expired"))
-                else -> Result.Failure(
-                    AppError.NetworkError("HTTP ${response.code()}: ${response.message()}")
-                )
-            }
-        } catch (e: IOException) {
-            Result.Failure(AppError.NetworkError(e.message ?: "Network error", e))
-        } catch (e: Exception) {
-            Result.Failure(AppError.ParseError(e.message ?: "Parse error", e))
-        }
+        return fetchQuotaFromApiBalance(credential)
     }
 
     private suspend fun fetchQuotaFromApiBalance(
@@ -88,7 +47,7 @@ class DeepSeekRepositoryImpl @Inject constructor(
 
         return try {
             val response = apiService.getBalance(
-                authorization = "Bearer ${credential.accessToken}"
+                authorization = "Bearer ${credential.accessToken.removePrefix("Bearer ").trim()}"
             )
 
             when (response.code()) {
@@ -97,8 +56,8 @@ class DeepSeekRepositoryImpl @Inject constructor(
                         ?: return Result.Failure(AppError.ParseError("Empty response body"))
                     Result.Success(mapBalanceToQuotaInfo(body, credential.initialTotal))
                 }
-                401 -> Result.Failure(AppError.AuthError(AiService.DEEPSEEK, isTerminal = true, message = "Invalid API key"))
-                402 -> Result.Failure(AppError.AuthError(AiService.DEEPSEEK, isTerminal = true, message = "Insufficient balance"))
+                401 -> Result.Failure(AppError.AuthError(AiService.DEEPSEEK, isTerminal = true, message = "Invalid DeepSeek API key"))
+                402 -> Result.Failure(AppError.AuthError(AiService.DEEPSEEK, isTerminal = true, message = "Insufficient DeepSeek balance"))
                 else -> Result.Failure(
                     AppError.NetworkError("HTTP ${response.code()}: ${response.message()}")
                 )
@@ -155,35 +114,6 @@ class DeepSeekRepositoryImpl @Inject constructor(
         }
     }
 
-    private fun mapUserSummaryToQuotaInfo(response: DeepSeekDto.UserSummaryResponse): QuotaInfo {
-        val data = response.data ?: error("Missing DeepSeek summary data")
-        val amount = findDouble(data.monthlyCosts, "amount")
-            ?: error("Missing monthly_costs.amount")
-        val balance = findDouble(data.normalWallets, "balance")
-            ?: error("Missing normal_wallets.balance")
-        val total = (amount + balance).coerceAtLeast(0.0)
-        val utilization = if (total > 0) {
-            (amount / total).coerceIn(0.0, 1.0)
-        } else 0.0
-        val currency = findString(data.normalWallets, "currency")
-            ?: findString(data.monthlyCosts, "currency")
-            ?: "CNY"
-
-        return QuotaInfo(
-            service = AiService.DEEPSEEK,
-            windows = emptyList(),
-            extraUsage = ExtraUsage(
-                isEnabled = true,
-                monthlyLimit = total,
-                usedCredits = amount,
-                utilization = utilization,
-                currency = currency
-            ),
-            tier = "Platform",
-            fetchedAt = Instant.now()
-        )
-    }
-
     private fun mapBalanceToQuotaInfo(response: DeepSeekDto.BalanceResponse, initialTotal: Double = 0.0): QuotaInfo {
         val info = response.balanceInfos.firstOrNull()
         val totalBalance = info?.totalBalance?.toDoubleOrNull() ?: 0.0
@@ -205,48 +135,9 @@ class DeepSeekRepositoryImpl @Inject constructor(
                 utilization = utilization,
                 currency = currency
             ),
-            tier = if (response.isAvailable) "Active" else "Unavailable",
+            tier = if (response.isAvailable) "API Balance" else "Unavailable",
             fetchedAt = Instant.now()
         )
-    }
-
-    private fun normalizeCookie(cookie: String): String {
-        return cookie.trim()
-            .removePrefix("Cookie:")
-            .removePrefix("cookie:")
-            .trim()
-    }
-
-    private fun validateCookieHeader(cookie: String): String? {
-        if (cookie.isBlank()) return "DeepSeek cookie is empty"
-        if (!cookie.contains("=")) {
-            return "DeepSeek cookie is incomplete. Paste the full Cookie header, for example: name=value; name2=value2"
-        }
-        return null
-    }
-
-    private fun findDouble(element: JsonElement?, key: String): Double? {
-        val value = findPrimitive(element, key)?.contentOrNull ?: return null
-        return value
-            .replace(",", "")
-            .filter { it.isDigit() || it == '.' || it == '-' }
-            .toDoubleOrNull()
-    }
-
-    private fun findString(element: JsonElement?, key: String): String? {
-        return findPrimitive(element, key)?.contentOrNull?.takeIf { it.isNotBlank() }
-    }
-
-    private fun findPrimitive(element: JsonElement?, key: String): JsonPrimitive? {
-        return when (element) {
-            is JsonObject -> {
-                element[key] as? JsonPrimitive
-                    ?: element.values.firstNotNullOfOrNull { findPrimitive(it, key) }
-            }
-            is JsonArray -> element.firstNotNullOfOrNull { findPrimitive(it, key) }
-            is JsonPrimitive -> null
-            null -> null
-        }
     }
 
     private fun currencySymbol(currency: String): String {
@@ -263,11 +154,11 @@ class DeepSeekRepositoryImpl @Inject constructor(
 
     private fun formatError(error: AppError): String {
         return when (error) {
-            is AppError.NetworkError -> "Network error"
+            is AppError.NetworkError -> "Network error: ${error.message}"
             is AppError.AuthError -> error.message.ifBlank { if (error.isTerminal) "Invalid API Key" else "Auth error" }
             is AppError.RateLimited -> "Rate limited"
             is AppError.ParseError -> error.message
-            is AppError.CredentialNotFound -> "Not configured"
+            is AppError.CredentialNotFound -> "DeepSeek API key required"
             is AppError.ServiceUnavailable -> "Service unavailable"
             is AppError.NeedsLogin -> error.message
         }
